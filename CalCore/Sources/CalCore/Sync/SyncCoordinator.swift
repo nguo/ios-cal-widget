@@ -52,16 +52,24 @@ public enum SyncCoordinator {
         }
     }
     
-    /// Refetch the whole currently-fetched date range
+    /// Refetch the whole currently-fetched date range, widened to at least the canonical window
+    /// covering the widget's current offset. The widening is what lets the "tap refresh" button
+    /// clear the stale banner: without it a refetch reuses `existing`'s window verbatim, so a cache
+    /// whose window had drifted narrower than the (week-aligned) widget window could never re-cover
+    /// it — refresh would refetch the same too-narrow range and the banner would persist.
     @discardableResult
     public static func refetchAll(
+        weekCount: Int = 2,
         calendar: Calendar,
         now: Date = Date()
     ) async -> Bool {
         guard let ctx = context() else { return false }
 
+        let covering = canonicalRange(coveringOffset: ctx.store.twoWeekPageOffset, weekCount: weekCount, calendar: calendar, now: now)
+        let start = min(ctx.existing.windowStart, covering.start)
+        let end = max(ctx.existing.windowEnd, covering.end)
         do {
-            let fetched = try await fetch(ctx: ctx, calendar: calendar, start: ctx.existing.windowStart, end: ctx.existing.windowEnd, now: now)
+            let fetched = try await fetch(ctx: ctx, calendar: calendar, start: start, end: end, now: now)
             try EventCache(appGroupIdentifier: AppConfig.appGroupID)?.write(fetched)
             ctx.store.lastSyncedAt = now
             return true
