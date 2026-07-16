@@ -13,13 +13,35 @@ public enum SyncCoordinator {
         return (start, end)
     }
 
+    /// The canonical range, widened so it also fully covers the widget window at `pageOffset`.
+    /// A paged widget's window can fall (partly) outside canonical — e.g. offset −1 mid-week
+    /// starts before `today−14`. Without this widening a canonical sync leaves that window
+    /// uncovered, so the widget shows the "tap to refresh" banner even though fresh events
+    /// are visible.
+    public static func canonicalRange(
+        coveringOffset pageOffset: Int,
+        weekCount: Int,
+        calendar: Calendar,
+        now: Date
+    ) -> (start: Date, end: Date) {
+        var (start, end) = canonicalRange(calendar: calendar, now: now)
+        if pageOffset != 0 {
+            let window = DateWindow(referenceDate: now, pageOffset: pageOffset, weekCount: weekCount, calendar: calendar)
+            start = min(start, window.startDate)
+            end = max(end, window.endExclusive)
+        }
+        return (start, end)
+    }
+
     /// Rebuilds the canonical −2/+6 window fresh and replaces the cache with exactly it
-    /// (discarding any ranges pagination had appended beyond). Returns false if not signed in
-    /// / no selected calendars — leaving any existing cache untouched.
+    /// (discarding any ranges pagination had appended beyond), widened to still cover the
+    /// widget's currently-paged window so a paged widget isn't stranded on the stale banner.
+    /// Returns false if not signed in / no selected calendars — leaving any existing cache
+    /// untouched.
     @discardableResult
-    public static func refreshCanonical(calendar: Calendar, now: Date = Date()) async -> Bool {
+    public static func refreshCanonical(weekCount: Int = 2, calendar: Calendar, now: Date = Date()) async -> Bool {
         guard let ctx = context() else { return false }
-        let range = canonicalRange(calendar: calendar, now: now)
+        let range = canonicalRange(coveringOffset: ctx.store.pageOffset, weekCount: weekCount, calendar: calendar, now: now)
         do {
             let cache = try await fetch(ctx: ctx, calendar: calendar, start: range.start, end: range.end, now: now)
             try EventCache(appGroupIdentifier: AppConfig.appGroupID)?.write(cache)
