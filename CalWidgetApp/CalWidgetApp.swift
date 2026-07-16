@@ -34,6 +34,10 @@ struct RootView: View {
     @EnvironmentObject private var auth: GoogleAuthService
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
+    /// True once this process has backgrounded at least once — i.e. later foregrounds are fast
+    /// resumes, not a cold launch. Gates the deep-link forward delay (cold launch only). Resets to
+    /// false on a fresh process, since @State lives as long as the app session.
+    @State private var hasBackgrounded = false
 
     var body: some View {
         NavigationStack {
@@ -48,7 +52,11 @@ struct RootView: View {
         // launch, where no scenePhase change fires) and on every activation (warm launch).
         .task { openPendingDeepLink() }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { openPendingDeepLink() }
+            switch phase {
+            case .active: openPendingDeepLink()
+            case .background: hasBackgrounded = true // later foregrounds are fast resumes, not cold
+            default: break
+            }
         }
         .onOpenURL { url in
             // Widget `Link`s (two-week grid) open the host app and deliver their destination here
@@ -74,6 +82,14 @@ struct RootView: View {
               let link = store.pendingDeepLink,
               let url = URL(string: link) else { return }
         store.pendingDeepLink = nil
-        openURL(url)
+        // Only a cold launch (fresh process, not yet backgrounded) is slow enough to foreground that
+        // forwarding mid-transition races Google Calendar — it drops the deep link's date and lands
+        // on today — so defer just that case. A resume from background is fast, so forward at once.
+        // (The removed debug alert masked the race by adding a human-scale delay to every tap.)
+        let isColdLaunch = !hasBackgrounded
+        Task { @MainActor in
+            if isColdLaunch { try? await Task.sleep(for: .milliseconds(500)) }
+            openURL(url)
+        }
     }
 }
