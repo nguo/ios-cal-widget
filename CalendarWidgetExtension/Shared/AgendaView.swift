@@ -21,9 +21,8 @@ struct AgendaView: View {
         VStack(alignment: .leading, spacing: 4) {
             header
             if entry.groups.isEmpty {
-                Spacer(minLength: 0)
-                emptyMessage.frame(maxWidth: .infinity, alignment: .center)
-                Spacer(minLength: 0)
+                emptyMessage
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             } else {
                 // spacing 0 so rendered group heights match AgendaEntryBuilder's fit math.
                 VStack(alignment: .leading, spacing: 0) {
@@ -33,15 +32,21 @@ struct AgendaView: View {
                         }
                     }
                 }
-                Spacer(minLength: 0)
+                // Claim all space below the header and hard-clip our own overflow, so a fuller
+                // page can't grow the VStack past the widget and get vertically centered — which
+                // was nudging the anchor up. agendaPageBudget targets this region; clip is the net.
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .clipped()
             }
         }
         .padding(8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .transaction { $0.animation = nil }
+        .contentTransition(.identity)
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             // Centered anchor (tap → first page) with paging chevrons pinned to the corners
             // (up top-left, down top-right) — a symmetric header that reads apart from the day
             // rows below.
@@ -57,6 +62,8 @@ struct AgendaView: View {
                 .fill(Color.white.opacity(0.12))
                 .frame(height: 0.5)
         }
+        .transaction { $0.animation = nil }
+        .contentTransition(.identity)
     }
 
     /// The anchor, tappable to jump back to the first page in the live widget (plain elsewhere).

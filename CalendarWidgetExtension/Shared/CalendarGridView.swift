@@ -55,6 +55,10 @@ struct CalendarGridView: View {
         .overlay {
             if entry.isSyncing { loadingOverlay }
         }
+        // Break view identity per page so paging swaps the whole grid instead of matching
+        // same-index all-day bars across snapshots and sliding them to their new columns.
+        .id(entry.window.pageOffset)
+        .transaction { $0.animation = nil }
     }
 
     /// Shown while a fetch is in flight (manual refresh or paginating into an unfetched range).
