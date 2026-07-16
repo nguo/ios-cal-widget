@@ -1,0 +1,25 @@
+import WidgetKit
+import SwiftUI
+import CalCore
+
+/// The small scrolling-agenda widget: a paged list of upcoming days. Delegates rendering to
+/// `AgendaView`; paging is handled by `AgendaPageIntent` buttons inside the view.
+struct AgendaWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: AppConfig.agendaWidgetKind, provider: AgendaTimelineProvider()) { entry in
+            AgendaView(entry: entry)
+                .containerBackground(.black, for: .widget)
+        }
+        .configurationDisplayName("Agenda")
+        .description("A scrolling agenda of your upcoming days.")
+        .supportedFamilies([.systemSmall])
+        .contentMarginsDisabled() // we manage our own padding
+    }
+}
+
+#Preview(as: .systemSmall) {
+    AgendaWidget()
+} timeline: {
+    WidgetFixtures.agendaEntry()
+    WidgetFixtures.agendaEntry(eventOffset: 3)
+}

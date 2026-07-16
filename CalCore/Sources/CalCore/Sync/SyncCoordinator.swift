@@ -5,17 +5,18 @@ import Foundation
 /// the selected calendars from the existing cache — no GoogleSignIn SDK needed, so it runs in
 /// the widget extension too. All writes are atomic (`EventCache.write`).
 public enum SyncCoordinator {
-    /// The rolling canonical window: 2 weeks before today .. 6 weeks after.
+    /// The rolling canonical window: today .. 2 weeks after. Kept intentionally small — paging
+    /// backfills anything beyond it on demand (see `fetchRangeIfNeeded`).
     public static func canonicalRange(calendar: Calendar, now: Date) -> (start: Date, end: Date) {
         let today = calendar.startOfDay(for: now)
-        let start = calendar.date(byAdding: .day, value: -14, to: today)!
-        let end = calendar.date(byAdding: .day, value: 42, to: today)!
+        let start = today
+        let end = calendar.date(byAdding: .day, value: 14, to: today)!
         return (start, end)
     }
 
     /// The canonical range, widened so it also fully covers the widget window at `pageOffset`.
     /// A paged widget's window can fall (partly) outside canonical — e.g. offset −1 mid-week
-    /// starts before `today−14`. Without this widening a canonical sync leaves that window
+    /// starts before `today`. Without this widening a canonical sync leaves that window
     /// uncovered, so the widget shows the "tap to refresh" banner even though fresh events
     /// are visible.
     public static func canonicalRange(
@@ -33,7 +34,7 @@ public enum SyncCoordinator {
         return (start, end)
     }
 
-    /// Rebuilds the canonical −2/+6 window fresh and replaces the cache with exactly it
+    /// Rebuilds the canonical today/+2wk window fresh and replaces the cache with exactly it
     /// (discarding any ranges pagination had appended beyond), widened to still cover the
     /// widget's currently-paged window so a paged widget isn't stranded on the stale banner.
     /// Returns false if not signed in / no selected calendars — leaving any existing cache
@@ -41,7 +42,7 @@ public enum SyncCoordinator {
     @discardableResult
     public static func refreshCanonical(weekCount: Int = 2, calendar: Calendar, now: Date = Date()) async -> Bool {
         guard let ctx = context() else { return false }
-        let range = canonicalRange(coveringOffset: ctx.store.pageOffset, weekCount: weekCount, calendar: calendar, now: now)
+        let range = canonicalRange(coveringOffset: ctx.store.twoWeekPageOffset, weekCount: weekCount, calendar: calendar, now: now)
         do {
             let cache = try await fetch(ctx: ctx, calendar: calendar, start: range.start, end: range.end, now: now)
             try EventCache(appGroupIdentifier: AppConfig.appGroupID)?.write(cache)

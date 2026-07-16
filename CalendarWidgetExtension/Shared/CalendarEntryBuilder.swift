@@ -28,7 +28,7 @@ enum CalendarEntryBuilder {
     static func live(weekCount: Int, reference: Date = Date(), offsetOverride: Int? = nil) -> CalendarTimelineEntry {
         let cal = calendar()
         let store = AppGroupStore(suiteName: AppConfig.appGroupID)
-        let offset = offsetOverride ?? store?.pageOffset ?? 0
+        let offset = offsetOverride ?? store?.twoWeekPageOffset ?? 0
         let isSyncing = store?.isSyncing ?? false
         let window = DateWindow(referenceDate: reference, pageOffset: offset, weekCount: weekCount, calendar: cal)
 

@@ -8,6 +8,13 @@ public enum AppConfig {
     /// WidgetKit `kind` for the two-week widget (used for reloadTimelines + the Widget).
     public static let twoWeekWidgetKind = "TwoWeekWidget"
 
+    /// WidgetKit `kind` for the scrolling agenda widget.
+    public static let agendaWidgetKind = "AgendaWidget"
+
+    /// Agenda widget: how many days forward the agenda covers, starting at today. Aligned with
+    /// the canonical cache window so the agenda shows everything cached without its own fetch.
+    public static let agendaHorizonDays = 14
+
     /// Shared Keychain access group suffix (prefixed with the team's AppIdentifierPrefix at runtime).
     public static let keychainAccessGroupSuffix = "com.ninbit.calwidget.tokens"
 

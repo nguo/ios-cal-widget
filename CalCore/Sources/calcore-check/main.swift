@@ -63,6 +63,13 @@ do {
     eq(EventTextFormatter.timePrefix(for: d(2026, 3, 16, 0, 0), calendar: cal), "12a", "midnight -> 12a")
     let s = d(2026, 3, 16, 16, 0)
     eq(EventTextFormatter.line(for: ev("1", "Party", s, s), calendar: cal), "4p Party", "timed line")
+
+    // clock without meridiem (start side of a range)
+    eq(EventTextFormatter.clock(for: d(2026, 3, 16, 9, 30), calendar: cal, meridiem: false), "9:30", "9:30 -> 9:30 (no meridiem)")
+    eq(EventTextFormatter.clock(for: d(2026, 3, 16, 16, 0), calendar: cal, meridiem: false), "4", "16:00 -> 4 (no meridiem)")
+    // timeRange: only the end carries am/pm
+    eq(EventTextFormatter.timeRange(for: ev("2", "M", d(2026, 3, 16, 9, 30), d(2026, 3, 16, 10, 0)), calendar: cal), "9:30-10a", "9:30-10a")
+    eq(EventTextFormatter.timeRange(for: ev("3", "M", d(2026, 3, 16, 9, 0), d(2026, 3, 16, 22, 30)), calendar: cal), "9-10:30p", "9-10:30p")
 }
 
 // MARK: DayCellContent
@@ -166,12 +173,12 @@ do {
     eq(merged.events.first { $0.id == "1" }?.title, "Fresh", "incoming event won de-dupe")
 }
 
-// MARK: SyncCoordinator canonical range (−2/+6 weeks)
+// MARK: SyncCoordinator canonical range (today .. +2 weeks)
 do {
     let now = d(2026, 3, 16, 12)
     let range = SyncCoordinator.canonicalRange(calendar: cal, now: now)
-    eq(cal.dateComponents([.day], from: range.start, to: cal.startOfDay(for: now)).day!, 14, "canonical start is 14 days before today")
-    eq(cal.dateComponents([.day], from: cal.startOfDay(for: now), to: range.end).day!, 42, "canonical end is 42 days after today")
+    eq(cal.dateComponents([.day], from: range.start, to: cal.startOfDay(for: now)).day!, 0, "canonical start is today")
+    eq(cal.dateComponents([.day], from: cal.startOfDay(for: now), to: range.end).day!, 14, "canonical end is 14 days after today")
 }
 
 // MARK: canonicalRange widened to cover the paged widget window

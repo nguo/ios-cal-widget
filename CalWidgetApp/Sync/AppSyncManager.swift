@@ -71,7 +71,7 @@ final class AppSyncManager: ObservableObject {
         AppGroupStore(suiteName: AppConfig.appGroupID)?.selectedCalendarIds = ids
     }
 
-    /// Fetch across selected calendars and write the cache. Covers the canonical −2/+6-week
+    /// Fetch across selected calendars and write the cache. Covers the canonical today/+2wk
     /// window, the widget's currently-paged window, and any wider range pagination had already
     /// fetched — so an app-initiated sync never strands a paged widget on the stale banner.
     func syncNow() async {
@@ -98,7 +98,7 @@ final class AppSyncManager: ObservableObject {
             try EventCache(appGroupIdentifier: AppConfig.appGroupID)?.write(cache)
             AppGroupStore(suiteName: AppConfig.appGroupID)?.lastSyncedAt = now
             status = "Synced \(cache.events.count) events across \(sources.filter { $0.isSelected }.count) calendars."
-            WidgetCenter.shared.reloadTimelines(ofKind: AppConfig.twoWeekWidgetKind)
+            WidgetCenter.shared.reloadAllTimelines() // refresh both the grid and agenda widgets
         } catch {
             status = "Sync failed: \(error.localizedDescription)"
         }
@@ -107,7 +107,7 @@ final class AppSyncManager: ObservableObject {
     /// Range to fetch: canonical, widened to cover the widget's currently-paged window and
     /// whatever breadth pagination had already cached (so a selection change refetches all of it).
     private func syncRange(now: Date) -> (start: Date, end: Date) {
-        let offset = AppGroupStore(suiteName: AppConfig.appGroupID)?.pageOffset ?? 0
+        let offset = AppGroupStore(suiteName: AppConfig.appGroupID)?.twoWeekPageOffset ?? 0
         var (start, end) = SyncCoordinator.canonicalRange(
             coveringOffset: offset, weekCount: 2, calendar: calendar, now: now
         )

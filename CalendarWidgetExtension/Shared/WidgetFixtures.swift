@@ -62,4 +62,20 @@ enum WidgetFixtures {
             lastSyncedAt: reference
         )
     }
+
+    /// A ready-to-render agenda entry for SwiftUI/widget previews. `eventOffset` selects the page.
+    static func agendaEntry(eventOffset: Int = 0, reference: Date = Date()) -> AgendaEntry {
+        var cal = Calendar.current
+        cal.firstWeekday = 1
+        let data = cache(calendar: cal, reference: reference)
+        let ordered = AgendaEntryBuilder.orderedEvents(reference: reference, calendar: cal, cache: data)
+        let bounds = AgendaEntryBuilder.boundaries(ordered)
+        let start = bounds.last(where: { $0 <= eventOffset }) ?? 0
+        return AgendaEntry(
+            date: reference,
+            groups: AgendaEntryBuilder.groups(from: ordered, offset: start),
+            canPageBack: start > 0,
+            lastSyncedAt: reference
+        )
+    }
 }
