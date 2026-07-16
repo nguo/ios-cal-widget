@@ -8,7 +8,7 @@ struct SignInView: View {
             Image(systemName: "calendar")
                 .font(.system(size: 56))
                 .foregroundStyle(.tint)
-            Text("Two Week Calendar")
+            Text("GCal Widgets")
                 .font(.title.bold())
             Text("Sign in with Google to show your calendars in the widget.")
                 .font(.subheadline)
