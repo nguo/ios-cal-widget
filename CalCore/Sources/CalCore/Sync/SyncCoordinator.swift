@@ -15,10 +15,11 @@ public enum SyncCoordinator {
     }
 
     /// The canonical range, widened so it also fully covers the widget window at `pageOffset`.
-    /// A paged widget's window can fall (partly) outside canonical — e.g. offset −1 mid-week
-    /// starts before `today`. Without this widening a canonical sync leaves that window
-    /// uncovered, so the widget shows the "tap to refresh" banner even though fresh events
-    /// are visible.
+    /// The grid widget's window is week-aligned, so even at offset 0 it starts on the current
+    /// week's Sunday — before `today` on any non-Sunday — and thus falls outside the canonical
+    /// `today … +2wk` range. Paged offsets fall outside too. Without this widening a canonical
+    /// sync leaves that window uncovered, so the widget shows the "tap to refresh" banner even
+    /// though fresh events are visible.
     public static func canonicalRange(
         coveringOffset pageOffset: Int,
         weekCount: Int,
@@ -26,11 +27,9 @@ public enum SyncCoordinator {
         now: Date
     ) -> (start: Date, end: Date) {
         var (start, end) = canonicalRange(calendar: calendar, now: now)
-        if pageOffset != 0 {
-            let window = DateWindow(referenceDate: now, pageOffset: pageOffset, weekCount: weekCount, calendar: calendar)
-            start = min(start, window.startDate)
-            end = max(end, window.endExclusive)
-        }
+        let window = DateWindow(referenceDate: now, pageOffset: pageOffset, weekCount: weekCount, calendar: calendar)
+        start = min(start, window.startDate)
+        end = max(end, window.endExclusive)
         return (start, end)
     }
 

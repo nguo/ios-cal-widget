@@ -181,25 +181,25 @@ do {
     eq(cal.dateComponents([.day], from: cal.startOfDay(for: now), to: range.end).day!, 14, "canonical end is 14 days after today")
 }
 
-// MARK: canonicalRange widened to cover the paged widget window
+// MARK: canonicalRange widened to cover the (week-aligned) widget window
 do {
-    // Mid-week "today": the offset −1 window starts before canonical's −14 day, so plain
-    // canonical fails to cover it (the "tap to refresh" bug); the widened range must cover it.
+    // Mid-week "today": the grid window is week-aligned, so both the offset −1 window and the
+    // offset 0 window start before the canonical start (today), so plain canonical fails to
+    // cover them (the "tap to refresh" bug); the widened range must cover them.
     let now = d(2026, 3, 18, 12) // Wednesday
-    let prev = DateWindow(referenceDate: now, pageOffset: -1, weekCount: 2, calendar: cal)
-
     let plain = SyncCoordinator.canonicalRange(calendar: cal, now: now)
     let plainCache = EventCacheData(generatedAt: now, windowStart: plain.start, windowEnd: plain.end, sources: [], events: [])
-    check(!plainCache.covers(start: prev.startDate, end: prev.endExclusive), "plain canonical does NOT cover the offset −1 window (the bug)")
 
-    let widened = SyncCoordinator.canonicalRange(coveringOffset: -1, weekCount: 2, calendar: cal, now: now)
-    let widenedCache = EventCacheData(generatedAt: now, windowStart: widened.start, windowEnd: widened.end, sources: [], events: [])
-    check(widenedCache.covers(start: prev.startDate, end: prev.endExclusive), "widened range covers the offset −1 window")
+    func checkCovers(_ offset: Int, _ label: String) {
+        let window = DateWindow(referenceDate: now, pageOffset: offset, weekCount: 2, calendar: cal)
+        check(!plainCache.covers(start: window.startDate, end: window.endExclusive), "plain canonical does NOT cover the \(label) window (the bug)")
+        let widened = SyncCoordinator.canonicalRange(coveringOffset: offset, weekCount: 2, calendar: cal, now: now)
+        let widenedCache = EventCacheData(generatedAt: now, windowStart: widened.start, windowEnd: widened.end, sources: [], events: [])
+        check(widenedCache.covers(start: window.startDate, end: window.endExclusive), "widened range covers the \(label) window")
+    }
 
-    // Offset 0 needs no widening — the widened range equals canonical.
-    let offset0 = SyncCoordinator.canonicalRange(coveringOffset: 0, weekCount: 2, calendar: cal, now: now)
-    eq(offset0.start, plain.start, "offset 0 leaves canonical start unchanged")
-    eq(offset0.end, plain.end, "offset 0 leaves canonical end unchanged")
+    checkCovers(0, "offset 0")   // week-aligned start (Sunday) is before today
+    checkCovers(-1, "offset −1") // previous window
 }
 
 // MARK: Token form-encoding
