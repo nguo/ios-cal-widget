@@ -222,6 +222,63 @@ let syncSem = DispatchSemaphore(value: 0)
 Task { await runSyncCheck(); syncSem.signal() }
 syncSem.wait()
 
+// MARK: WeekLayout — spanning all-day segments + lane packing
+do {
+    let week = (0..<7).map { d(2026, 3, 1 + $0) } // Mar 1..7 = columns 0..6
+    func allDay(_ id: String, _ title: String, _ startDay: Int, _ endExclusiveDay: Int, color: String = "#4285F4") -> CalendarEvent {
+        ev(id, title, d(2026, 3, startDay), d(2026, 3, endExclusiveDay), allDay: true)
+    }
+    func byDay(_ events: [CalendarEvent]) -> [Date: [CalendarEvent]] {
+        var m: [Date: [CalendarEvent]] = [:]
+        for day in week { m[day] = events.filter { $0.covers(day: day, calendar: cal) } }
+        return m
+    }
+
+    // Single 3-day span Mar 2–4 → cols 1..3, one lane, no continuation.
+    let trip = allDay("trip", "Trip", 2, 5)
+    let l1 = WeekLayout(days: week, eventsByDay: byDay([trip]), calendar: cal, maxRowsPerCell: 4)
+    eq(l1.allDaySegments.count, 1, "one all-day segment")
+    eq(l1.allDaySegments.first?.startColumn, 1, "segment startColumn = Mar 2")
+    eq(l1.allDaySegments.first?.endColumn, 3, "segment endColumn = Mar 4")
+    eq(l1.laneCount, 1, "one lane")
+    eq(l1.allDaySegments.first?.continuesLeft, false, "does not continue left")
+    eq(l1.allDaySegments.first?.continuesRight, false, "does not continue right")
+
+    // Two overlapping all-day events → 2 lanes.
+    let conf = allDay("conf", "Conf", 3, 6) // Mar 3–5, overlaps Trip
+    let l2 = WeekLayout(days: week, eventsByDay: byDay([trip, conf]), calendar: cal, maxRowsPerCell: 4)
+    eq(l2.laneCount, 2, "overlapping all-day events -> 2 lanes")
+    eq(Set(l2.allDaySegments.map { $0.lane }), Set([0, 1]), "segments on distinct lanes")
+
+    // Two NON-overlapping all-day events share one lane (packing).
+    let solo = allDay("solo", "Solo", 6, 7) // Mar 6, after Trip ends
+    let l3 = WeekLayout(days: week, eventsByDay: byDay([trip, solo]), calendar: cal, maxRowsPerCell: 4)
+    eq(l3.laneCount, 1, "non-overlapping all-day events pack into one lane")
+
+    // Cross-week: event starting before this week → clipped + continuesLeft.
+    let long = ev("long", "Long", d(2026, 2, 26), d(2026, 3, 3), allDay: true) // Feb 26–Mar 2
+    let l4 = WeekLayout(days: week, eventsByDay: byDay([long]), calendar: cal, maxRowsPerCell: 4)
+    eq(l4.allDaySegments.first?.startColumn, 0, "cross-week clipped to col 0")
+    eq(l4.allDaySegments.first?.endColumn, 1, "cross-week last covered = Mar 2 (col 1)")
+    eq(l4.allDaySegments.first?.continuesLeft, true, "continues left (started prior week)")
+
+    // Timed budget reduced by lane count.
+    let s = d(2026, 3, 3, 9)
+    let timedEvents = (1...4).map { ev("t\($0)", "T\($0)", d(2026, 3, 3, 8 + $0), d(2026, 3, 3, 9 + $0)) }
+    let l5 = WeekLayout(days: week, eventsByDay: byDay([trip] + timedEvents), calendar: cal, maxRowsPerCell: 4)
+    _ = s
+    // col 2 (Mar 3) has the 4 timed events; with 1 all-day lane, timed budget = 3 → 2 shown + "+2 more".
+    eq(l5.timedByColumn[2]?.rows.count, 3, "timed budget reduced to 3 rows on a lane-occupied column")
+    if case .moreCount = l5.timedByColumn[2]?.rows.last {} else { check(false, "expected a +N more row when timed overflow") }
+
+    // Per-column reservation: a column with NO all-day covering it keeps its full top row/budget.
+    eq(l5.lanesByColumn[0], 0, "uncovered column reserves 0 lanes")
+    eq(l5.lanesByColumn[2], 1, "column under the trip reserves 1 lane")
+    let farTimed = (1...4).map { ev("f\($0)", "F\($0)", d(2026, 3, 6, 8 + $0), d(2026, 3, 6, 9 + $0)) }
+    let l6 = WeekLayout(days: week, eventsByDay: byDay([trip] + farTimed), calendar: cal, maxRowsPerCell: 4)
+    eq(l6.timedByColumn[5]?.rows.count, 4, "uncovered column keeps full 4-row budget (no blank first line)")
+}
+
 print("")
 if failures == 0 {
     print("✅ All \(checks) CalCore checks passed.")

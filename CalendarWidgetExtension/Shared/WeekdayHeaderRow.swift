@@ -9,7 +9,7 @@ struct WeekdayHeaderRow: View {
             ForEach(Array(symbols.enumerated()), id: \.offset) { index, symbol in
                 Text(symbol)
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(index == 0 ? DayCellView.accent : Color.white.opacity(0.5))
+                    .foregroundStyle(index == 0 ? WidgetStyle.accent : Color.white.opacity(0.5))
                     .frame(maxWidth: .infinity)
             }
         }

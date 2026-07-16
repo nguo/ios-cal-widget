@@ -38,13 +38,11 @@ struct CalendarGridView: View {
             WeekdayHeaderRow()
 
             ForEach(Array(weeks.enumerated()), id: \.offset) { _, week in
-                HStack(spacing: 1) {
-                    ForEach(week, id: \.self) { day in
-                        Link(destination: DeepLinkBuilder.dayURL(for: day, calendar: calendar)) {
-                            DayCellView(day: day, events: entry.eventsByDay[day] ?? [], calendar: calendar)
-                        }
-                    }
-                }
+                WeekRowView(
+                    days: week,
+                    layout: WeekLayout(days: week, eventsByDay: entry.eventsByDay, calendar: calendar, maxRowsPerCell: 4),
+                    calendar: calendar
+                )
                 .frame(maxHeight: .infinity)
             }
 

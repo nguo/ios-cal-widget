@@ -65,7 +65,7 @@ struct TodayIcon: View {
     var body: some View {
         VStack(spacing: 0) {
             Rectangle()
-                .fill(DayCellView.accent)
+                .fill(WidgetStyle.accent)
                 .frame(height: 4)
             Text("\(day)")
                 .font(.system(size: 9, weight: .bold))

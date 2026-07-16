@@ -21,7 +21,11 @@ enum WidgetFixtures {
             .init(id: "1", calendarId: "a", title: "Lunch", startDate: at(0, 12), endDate: at(0, 13), isAllDay: false, colorHex: green),
             .init(id: "2", calendarId: "a", title: "Museum", startDate: at(0, 15), endDate: at(0, 16, 30), isAllDay: false, colorHex: purple),
             .init(id: "3", calendarId: "b", title: "Cycling", startDate: at(2, 17, 30), endDate: at(2, 19), isAllDay: false, colorHex: blue),
-            .init(id: "4", calendarId: "b", title: "Trip", startDate: day(6), endDate: day(7), isAllDay: true, colorHex: blue),
+            // Multi-day all-day events (spanning bars): a 3-day trip, an overlapping conference,
+            // and a longer one that crosses the week boundary.
+            .init(id: "4", calendarId: "b", title: "Trip to Portland", startDate: day(1), endDate: day(4), isAllDay: true, colorHex: blue),
+            .init(id: "4b", calendarId: "a", title: "Conf", startDate: day(2), endDate: day(4), isAllDay: true, colorHex: purple),
+            .init(id: "4c", calendarId: "b", title: "Vacation", startDate: day(5), endDate: day(10), isAllDay: true, colorHex: green),
             .init(id: "5", calendarId: "a", title: "Standup", startDate: at(8, 9), endDate: at(8, 9, 30), isAllDay: false, colorHex: blue),
             .init(id: "6", calendarId: "a", title: "1:1", startDate: at(8, 11), endDate: at(8, 11, 30), isAllDay: false, colorHex: green),
             .init(id: "7", calendarId: "a", title: "Review", startDate: at(8, 14), endDate: at(8, 15), isAllDay: false, colorHex: purple),
