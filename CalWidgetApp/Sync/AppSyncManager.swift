@@ -56,7 +56,7 @@ final class AppSyncManager: ObservableObject {
         AppGroupStore(suiteName: AppConfig.appGroupID)?.selectedCalendarIds = ids
     }
 
-    /// Fetch the canonical −2/+6-week window across selected calendars and write the cache.
+    /// Fetch the canonical window (today/+2wk) across selected calendars and write the cache.
     func syncNow() async {
         guard let auth else { return }
         guard EventCache(appGroupIdentifier: AppConfig.appGroupID) != nil else {
@@ -68,20 +68,18 @@ final class AppSyncManager: ObservableObject {
         do {
             let token = try await auth.accessToken()
             let service = CalendarSyncService(api: api, calendar: calendar)
-            let today = calendar.startOfDay(for: Date())
-            let start = calendar.date(byAdding: .day, value: -14, to: today)!
-            let end = calendar.date(byAdding: .day, value: 42, to: today)!
+            let range = SyncCoordinator.canonicalRange(calendar: calendar, now: Date())
 
             let cache = await service.buildCache(
                 sources: sources,
-                rangeStart: start,
-                rangeEnd: end,
+                rangeStart: range.start,
+                rangeEnd: range.end,
                 now: Date(),
                 tokenProvider: { _ in token } // single account for now
             )
             try EventCache(appGroupIdentifier: AppConfig.appGroupID)?.write(cache)
             status = "Synced \(cache.events.count) events across \(sources.filter { $0.isSelected }.count) calendars."
-            WidgetCenter.shared.reloadTimelines(ofKind: AppConfig.twoWeekWidgetKind)
+            WidgetCenter.shared.reloadAllTimelines() // refresh both the grid and agenda widgets
         } catch {
             status = "Sync failed: \(error.localizedDescription)"
         }

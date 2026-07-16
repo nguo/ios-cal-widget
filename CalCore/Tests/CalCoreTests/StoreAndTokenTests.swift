@@ -18,9 +18,9 @@ final class AppGroupStoreTests: XCTestCase {
 
     func testPageOffsetDefaultsToZeroAndPersists() {
         let store = AppGroupStore(defaults: defaults)
-        XCTAssertEqual(store.pageOffset, 0)
-        store.pageOffset = -1
-        XCTAssertEqual(AppGroupStore(defaults: defaults).pageOffset, -1)
+        XCTAssertEqual(store.twoWeekPageOffset, 0)
+        store.twoWeekPageOffset = -1
+        XCTAssertEqual(AppGroupStore(defaults: defaults).twoWeekPageOffset, -1)
     }
 
     func testIsSyncingFlag() {

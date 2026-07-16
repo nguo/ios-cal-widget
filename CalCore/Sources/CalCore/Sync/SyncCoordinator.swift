@@ -5,15 +5,16 @@ import Foundation
 /// the selected calendars from the existing cache — no GoogleSignIn SDK needed, so it runs in
 /// the widget extension too. All writes are atomic (`EventCache.write`).
 public enum SyncCoordinator {
-    /// The rolling canonical window: 2 weeks before today .. 6 weeks after.
+    /// The rolling canonical window: today .. 2 weeks after. Kept intentionally small — paging
+    /// backfills anything beyond it on demand (see `fetchRangeIfNeeded`).
     public static func canonicalRange(calendar: Calendar, now: Date) -> (start: Date, end: Date) {
         let today = calendar.startOfDay(for: now)
-        let start = calendar.date(byAdding: .day, value: -14, to: today)!
-        let end = calendar.date(byAdding: .day, value: 42, to: today)!
+        let start = today
+        let end = calendar.date(byAdding: .day, value: 14, to: today)!
         return (start, end)
     }
 
-    /// Rebuilds the canonical −2/+6 window fresh and replaces the cache with exactly it
+    /// Rebuilds the canonical today/+2wk window fresh and replaces the cache with exactly it
     /// (discarding any ranges pagination had appended beyond). Returns false if not signed in
     /// / no selected calendars — leaving any existing cache untouched.
     @discardableResult

@@ -18,8 +18,8 @@ struct ShiftWindowIntent: AppIntent {
 
     func perform() async throws -> some IntentResult {
         guard let store = AppGroupStore(suiteName: AppConfig.appGroupID) else { return .result() }
-        let newOffset = store.pageOffset + direction
-        store.pageOffset = newOffset
+        let newOffset = store.twoWeekPageOffset + direction
+        store.twoWeekPageOffset = newOffset
 
         var cal = Calendar.current
         cal.firstWeekday = 1

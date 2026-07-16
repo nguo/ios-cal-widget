@@ -9,7 +9,8 @@ public struct AppGroupStore {
     private let defaults: UserDefaults
 
     private enum Key {
-        static let pageOffset = "pageOffset"
+        static let twoWeekPageOffset = "twoWeekPageOffset"
+        static let agendaEventOffset = "agendaEventOffset"
         static let isSyncing = "isSyncing"
         static let selectedCalendarIds = "selectedCalendarIds"
         static let lastSyncedAt = "lastSyncedAt"
@@ -27,11 +28,19 @@ public struct AppGroupStore {
         self.defaults = d
     }
 
-    /// Signed count of whole windows from "the window containing today".
-    /// 0 = current, +1 = next window, -1 = previous.
-    public var pageOffset: Int {
-        get { defaults.integer(forKey: Key.pageOffset) }
-        nonmutating set { defaults.set(newValue, forKey: Key.pageOffset) }
+    /// Two-week grid pagination: signed count of whole windows from "the window containing
+    /// today". 0 = current, +1 = next window, -1 = previous.
+    public var twoWeekPageOffset: Int {
+        get { defaults.integer(forKey: Key.twoWeekPageOffset) }
+        nonmutating set { defaults.set(newValue, forKey: Key.twoWeekPageOffset) }
+    }
+
+    /// Agenda pagination: index of the first visible event in the forward-ordered event list
+    /// (0 = first event on the today page, then steps of `AppConfig.agendaEventsPerPage`). Never
+    /// negative — the agenda doesn't page into the past.
+    public var agendaEventOffset: Int {
+        get { defaults.integer(forKey: Key.agendaEventOffset) }
+        nonmutating set { defaults.set(newValue, forKey: Key.agendaEventOffset) }
     }
 
     /// True while a sync is in flight. Read by `RefreshNowIntent` (to no-op on double-tap)
