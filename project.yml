@@ -1,0 +1,102 @@
+name: CalWidgetApp
+
+options:
+  bundleIdPrefix: com.ninbit.calwidget
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.9"
+    CODE_SIGN_STYLE: Automatic
+
+# DEVELOPMENT_TEAM, GID_CLIENT_ID, REVERSED_CLIENT_ID come from a gitignored Local.xcconfig
+# (copy Local.xcconfig.example → Local.xcconfig). Keeps IDs out of the public repo.
+configFiles:
+  Debug: Local.xcconfig
+  Release: Local.xcconfig
+
+packages:
+  CalCore:
+    path: CalCore
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: "7.1.0"
+
+# Explicit shared scheme so "CalWidgetApp" stays runnable across regenerations
+# (autocreated user schemes break when target UUIDs change on regen).
+schemes:
+  CalWidgetApp:
+    build:
+      targets:
+        CalWidgetApp: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+
+targets:
+  CalWidgetApp:
+    type: application
+    platform: iOS
+    sources:
+      - CalWidgetApp
+      # Shared widget views also compile into the app so it can host an in-app preview.
+      - CalendarWidgetExtension/Shared
+    dependencies:
+      - package: CalCore
+      - package: GoogleSignIn
+        product: GoogleSignIn
+      - target: CalendarWidgetExtension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ninbit.calwidget
+        CODE_SIGN_ENTITLEMENTS: CalWidgetApp/CalWidgetApp.entitlements
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait"
+    info:
+      path: CalWidgetApp/Info.plist
+      properties:
+        CFBundleDisplayName: Cal Widget
+        UILaunchScreen: {}
+        # Google OAuth iOS client — value comes from Local.xcconfig (gitignored).
+        GIDClientID: $(GID_CLIENT_ID)
+        CFBundleURLTypes:
+          - CFBundleURLSchemes:
+              - $(REVERSED_CLIENT_ID)
+        # Background refresh
+        BGTaskSchedulerPermittedIdentifiers:
+          - com.ninbit.calwidget.refresh
+        UIBackgroundModes:
+          - fetch
+
+  CalendarWidgetExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - CalendarWidgetExtension
+    dependencies:
+      - package: CalCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ninbit.calwidget.widget
+        CODE_SIGN_ENTITLEMENTS: CalendarWidgetExtension/CalendarWidgetExtension.entitlements
+    info:
+      path: CalendarWidgetExtension/Info.plist
+      properties:
+        CFBundleDisplayName: Two Week Calendar
+        # So the extension process can read the client ID via Bundle.main (for token refresh).
+        GIDClientID: $(GID_CLIENT_ID)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension

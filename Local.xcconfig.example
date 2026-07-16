@@ -1,0 +1,9 @@
+// Copy this file to `Local.xcconfig` and fill in your own values (that file is gitignored).
+//
+// DEVELOPMENT_TEAM  — your 10-char Apple Team ID (Xcode → Settings → Accounts).
+// GID_CLIENT_ID     — Google OAuth iOS client ID (…apps.googleusercontent.com).
+// REVERSED_CLIENT_ID— the reversed client ID (com.googleusercontent.apps.…), used as the
+//                     OAuth callback URL scheme.
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
+GID_CLIENT_ID = YOUR_CLIENT_ID.apps.googleusercontent.com
+REVERSED_CLIENT_ID = com.googleusercontent.apps.YOUR_CLIENT_ID
