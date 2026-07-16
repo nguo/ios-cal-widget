@@ -94,4 +94,17 @@ final class FormattingTests: XCTestCase {
         let url = DeepLinkBuilder.dayURL(for: d, accountIndex: 2, calendar: cal)
         XCTAssertEqual(url.absoluteString, "https://calendar.google.com/calendar/u/2/r/day/2026/12/25")
     }
+
+    func testScheduleURLUsesNonPaddedAgendaRoute() {
+        let d = TestSupport.date(2026, 7, 5, 12, 0, calendar: cal)
+        let url = DeepLinkBuilder.scheduleURL(for: d, calendar: cal)
+        XCTAssertEqual(url.absoluteString, "https://calendar.google.com/calendar/u/0/r/agenda/2026/7/5")
+    }
+
+    func testEventURLIsTheCanonicalHtmlLink() {
+        // The event deep link is Google's own htmlLink, used verbatim (device-confirmed to open the
+        // Google Calendar app to the exact event).
+        let html = "https://www.google.com/calendar/event?eid=YWJjMTIzIG5pbmE"
+        XCTAssertEqual(DeepLinkBuilder.eventURL(htmlLink: html)?.absoluteString, html)
+    }
 }

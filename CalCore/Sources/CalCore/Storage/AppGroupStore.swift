@@ -15,6 +15,7 @@ public struct AppGroupStore {
         static let selectedCalendarIds = "selectedCalendarIds"
         static let lastSyncedAt = "lastSyncedAt"
         static let accountEmail = "accountEmail"
+        static let pendingDeepLink = "pendingDeepLink"
     }
 
     public init(defaults: UserDefaults) {
@@ -65,5 +66,13 @@ public struct AppGroupStore {
     public var accountEmail: String? {
         get { defaults.string(forKey: Key.accountEmail) }
         nonmutating set { defaults.set(newValue, forKey: Key.accountEmail) }
+    }
+
+    /// A deep link the widget wants the app to open. A small widget can't follow a `Link`, so a
+    /// tapped agenda row stashes its Google Calendar URL here and opens the app; the app reads and
+    /// forwards to it, then clears this. Written by `OpenDeepLinkIntent`, consumed by the app.
+    public var pendingDeepLink: String? {
+        get { defaults.string(forKey: Key.pendingDeepLink) }
+        nonmutating set { defaults.set(newValue, forKey: Key.pendingDeepLink) }
     }
 }

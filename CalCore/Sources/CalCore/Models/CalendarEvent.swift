@@ -17,6 +17,11 @@ public struct CalendarEvent: Codable, Identifiable, Hashable, Sendable {
     public let isAllDay: Bool
     /// Denormalized copy of the source calendar's color, e.g. "#7986CB".
     public let colorHex: String
+    /// Google's canonical event link (`event.htmlLink` from the API), e.g.
+    /// "https://www.google.com/calendar/event?eid=...". Used to deep-link the agenda widget to the
+    /// exact event — the `eid` it carries is Google's own, avoiding fragile hand-encoding. Optional
+    /// so events cached before this field existed (and non-Google sources) still decode.
+    public let htmlLink: String?
 
     public init(
         id: String,
@@ -25,7 +30,8 @@ public struct CalendarEvent: Codable, Identifiable, Hashable, Sendable {
         startDate: Date,
         endDate: Date,
         isAllDay: Bool,
-        colorHex: String
+        colorHex: String,
+        htmlLink: String? = nil
     ) {
         self.id = id
         self.calendarId = calendarId
@@ -34,6 +40,7 @@ public struct CalendarEvent: Codable, Identifiable, Hashable, Sendable {
         self.endDate = endDate
         self.isAllDay = isAllDay
         self.colorHex = colorHex
+        self.htmlLink = htmlLink
     }
 
     /// The last calendar day this event covers, inclusive. For all-day events the

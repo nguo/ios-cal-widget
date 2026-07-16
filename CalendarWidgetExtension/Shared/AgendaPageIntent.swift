@@ -48,3 +48,24 @@ struct AgendaGoToStartIntent: AppIntent {
         return .result()
     }
 }
+
+/// Opens a Google Calendar deep link from the agenda widget. A `systemSmall` widget ignores
+/// SwiftUI `Link`, so each tappable row is a `Button(intent:)` running this instead: it stashes the
+/// target URL in the App Group and (via `openAppWhenRun`) opens the app, which forwards to Google
+/// Calendar and clears the link (see CalWidgetApp.RootView).
+struct OpenDeepLinkIntent: AppIntent {
+    static var title: LocalizedStringResource = "Open Calendar Link"
+    static var isDiscoverable: Bool = false
+    static var openAppWhenRun: Bool = true
+
+    @Parameter(title: "URL")
+    var url: String
+
+    init() {}
+    init(url: URL) { self.url = url.absoluteString }
+
+    func perform() async throws -> some IntentResult {
+        AppGroupStore(suiteName: AppConfig.appGroupID)?.pendingDeepLink = url
+        return .result()
+    }
+}

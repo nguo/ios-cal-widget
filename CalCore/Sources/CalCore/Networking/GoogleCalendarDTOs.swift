@@ -32,6 +32,8 @@ public struct GCalEvent: Codable, Sendable {
     public let end: GCalEventDateTime?
     /// "confirmed" | "tentative" | "cancelled".
     public let status: String?
+    /// Google's canonical link to this event; carried through for the widget deep link.
+    public let htmlLink: String?
 }
 
 /// Google represents a boundary as EITHER `date` (all-day, no time) OR `dateTime` (timed).
@@ -101,7 +103,8 @@ public extension CalendarEvent {
             startDate: startDate,
             endDate: endDate,
             isAllDay: allDay,
-            colorHex: colorHex
+            colorHex: colorHex,
+            htmlLink: gcal.htmlLink
         )
     }
 

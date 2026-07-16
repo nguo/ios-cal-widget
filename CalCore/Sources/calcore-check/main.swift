@@ -98,6 +98,10 @@ do {
        "https://calendar.google.com/calendar/u/0/r/day/2026/7/5", "non-padded day URL")
     eq(DeepLinkBuilder.dayURL(for: d(2026, 12, 25, 12, 0), accountIndex: 2, calendar: cal).absoluteString,
        "https://calendar.google.com/calendar/u/2/r/day/2026/12/25", "account index in URL")
+    eq(DeepLinkBuilder.eventURL(htmlLink: "https://www.google.com/calendar/event?eid=YWJjMTIz")?.absoluteString ?? "nil",
+       "https://www.google.com/calendar/event?eid=YWJjMTIz", "event htmlLink passthrough")
+    eq(DeepLinkBuilder.scheduleURL(for: d(2026, 7, 5, 12, 0), calendar: cal).absoluteString,
+       "https://calendar.google.com/calendar/u/0/r/agenda/2026/7/5", "schedule (agenda) view URL")
 }
 
 // MARK: All-day mapping (build DTOs by decoding JSON, as production does)

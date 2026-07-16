@@ -21,6 +21,9 @@ struct AgendaGroupView: View {
     let calendar: Calendar
     /// Today, for the "in N days" relative suffix and the today pill.
     let referenceDate: Date
+    /// False in a non-widget host (e.g. an in-app preview) where the intent buttons don't apply;
+    /// rows render as plain, non-tappable content there.
+    var interactive: Bool = true
 
     private var isToday: Bool { calendar.isDateInToday(group.day) }
 
@@ -47,14 +50,41 @@ struct AgendaGroupView: View {
         // spacing 0: row heights (WidgetStyle) already include breathing room and the pagination
         // fit math assumes no inter-row gaps.
         VStack(alignment: .leading, spacing: 0) {
-            dayHeader
-                .frame(height: WidgetStyle.agendaDayHeaderHeight, alignment: .leading)
+            // Day header opens that day; each event opens its own detail view. Small widgets ignore
+            // `Link`, so taps route through OpenDeepLinkIntent -> the app -> Google Calendar.
+            deepLinkRow(url: DeepLinkBuilder.dayURL(for: group.day, calendar: calendar)) {
+                dayHeader
+                    .frame(height: WidgetStyle.agendaDayHeaderHeight, alignment: .leading)
+            }
             ForEach(group.events) { event in
-                eventRow(event)
+                deepLinkRow(url: eventDestination(event)) {
+                    eventRow(event)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .contentShape(Rectangle()) // whole group tappable for the Link
+    }
+
+    /// Wraps a row in a full-width tap target that deep-links to `url`. Interactive (widget) hosts
+    /// use an intent button; non-interactive hosts render the plain content.
+    @ViewBuilder
+    private func deepLinkRow<Content: View>(url: URL, @ViewBuilder content: () -> Content) -> some View {
+        let row = content()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        if interactive {
+            Button(intent: OpenDeepLinkIntent(url: url)) { row }
+                .buttonStyle(.plain)
+        } else {
+            row
+        }
+    }
+
+    /// Deep link for an event row: the event itself via its Google `htmlLink`, falling back to the
+    /// day when no event URL can be formed (see DeepLinkBuilder.eventURL).
+    private func eventDestination(_ event: CalendarEvent) -> URL {
+        (event.htmlLink.flatMap { DeepLinkBuilder.eventURL(htmlLink: $0) })
+            ?? DeepLinkBuilder.dayURL(for: group.day, calendar: calendar)
     }
 
     @ViewBuilder

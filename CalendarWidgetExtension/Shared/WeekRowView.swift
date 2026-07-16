@@ -3,8 +3,8 @@ import CalCore
 
 /// One week (7 columns). All-day events render as **connected spanning bars** laid out by
 /// `WeekLayout` and overlaid across columns; timed events + the date number stay per-column.
-/// Each column is a `Link` (tap → Google Calendar for that day); the bars sit above with hit
-/// testing disabled so taps fall through to the column.
+/// Each column is a `Link` (tap → Google Calendar's Schedule view starting on that day); the bars
+/// sit above with hit testing disabled so taps fall through to the column.
 struct WeekRowView: View {
     let days: [Date]
     let layout: WeekLayout
@@ -17,7 +17,7 @@ struct WeekRowView: View {
                 // Layer A — per-column cells (date + timed), tappable.
                 HStack(spacing: 0) {
                     ForEach(Array(days.enumerated()), id: \.element) { col, day in
-                        Link(destination: DeepLinkBuilder.dayURL(for: day, calendar: calendar)) {
+                        Link(destination: DeepLinkBuilder.scheduleURL(for: day, calendar: calendar)) {
                             ColumnView(day: day,
                                        timed: layout.timedByColumn[col],
                                        laneSpace: CGFloat(layout.lanesByColumn[col] ?? 0) * WidgetStyle.laneHeight,

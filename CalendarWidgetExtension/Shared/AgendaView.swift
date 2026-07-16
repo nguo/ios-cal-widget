@@ -3,7 +3,8 @@ import WidgetKit
 import CalCore
 
 /// The small agenda widget: an "AGENDA" header with up/down paging buttons (top-right), then the
-/// current page's day-groups. Each group is a Link opening the Google Calendar app to that day.
+/// current page's day-groups. Within a group, the day header opens the Google Calendar app to that
+/// day and each event row opens that event's detail view (see AgendaGroupView).
 /// The up button hides on the first page; the down button is always shown (it stops advancing at
 /// the last event). Reads an `AgendaEntry`; no networking here.
 struct AgendaView: View {
@@ -27,9 +28,10 @@ struct AgendaView: View {
                 // spacing 0 so rendered group heights match AgendaEntryBuilder's fit math.
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(entry.groups) { group in
-                        Link(destination: DeepLinkBuilder.dayURL(for: group.day, calendar: calendar)) {
-                            AgendaGroupView(group: group, calendar: calendar, referenceDate: entry.date)
-                        }
+                        // Per-row deep links inside the group: the day header opens that day, each
+                        // event opens its own detail view (routed through the app; see AgendaGroupView).
+                        AgendaGroupView(group: group, calendar: calendar,
+                                        referenceDate: entry.date, interactive: interactive)
                     }
                 }
                 // Claim all space below the header and hard-clip our own overflow, so a fuller
