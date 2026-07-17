@@ -25,10 +25,22 @@ enum AgendaEntryBuilder {
             guard let day = calendar.date(byAdding: .day, value: offset, to: today) else { continue }
             let dayEvents = cache.events.filter { $0.covers(day: day, calendar: calendar) }
             for event in sortedForDay(dayEvents) {
+                // Hide timed events that have already ended (all-day + future days unaffected).
+                if !event.isAllDay && event.endDate <= reference { continue }
                 result.append((day, event))
             }
         }
         return result
+    }
+
+    /// The instants between `after` and `before` at which a currently-visible timed event ends —
+    /// i.e. the future moments the agenda's contents change. Used to schedule timeline reload points
+    /// so an event drops off the widget the minute it's over. Sorted ascending, deduplicated.
+    static func upcomingEndTimes(after: Date, before: Date, cache: EventCacheData) -> [Date] {
+        let ends = cache.events
+            .filter { !$0.isAllDay && $0.endDate > after && $0.endDate < before }
+            .map(\.endDate)
+        return Array(Set(ends)).sorted()
     }
 
     /// All-day first, then timed ascending by start; titles break ties (deterministic).
