@@ -16,7 +16,7 @@ final class GCalMappingTests: XCTestCase {
             id: "e1", summary: "Meeting",
             start: GCalEventDateTime(date: nil, dateTime: "2026-07-15T17:30:00-07:00", timeZone: nil),
             end: GCalEventDateTime(date: nil, dateTime: "2026-07-15T18:00:00-07:00", timeZone: nil),
-            status: "confirmed"
+            status: "confirmed", htmlLink: nil
         )
         let e = try XCTUnwrap(try CalendarEvent.from(g, calendarId: "cal1", colorHex: "#123456", calendar: cal))
         XCTAssertFalse(e.isAllDay)
@@ -31,7 +31,7 @@ final class GCalMappingTests: XCTestCase {
             id: "e2", summary: "Holiday",
             start: GCalEventDateTime(date: "2026-07-15", dateTime: nil, timeZone: nil),
             end: GCalEventDateTime(date: "2026-07-16", dateTime: nil, timeZone: nil),
-            status: "confirmed"
+            status: "confirmed", htmlLink: nil
         )
         let e = try XCTUnwrap(try CalendarEvent.from(g, calendarId: "cal1", colorHex: "#abcdef", calendar: cal))
         XCTAssertTrue(e.isAllDay)
@@ -47,7 +47,7 @@ final class GCalMappingTests: XCTestCase {
             id: "trip", summary: "Trip",
             start: GCalEventDateTime(date: "2026-07-15", dateTime: nil, timeZone: nil),
             end: GCalEventDateTime(date: "2026-07-18", dateTime: nil, timeZone: nil),
-            status: "confirmed"
+            status: "confirmed", htmlLink: nil
         )
         let e = try XCTUnwrap(try CalendarEvent.from(g, calendarId: "cal1", colorHex: "#000", calendar: cal))
         for day in 15...17 {
@@ -61,7 +61,7 @@ final class GCalMappingTests: XCTestCase {
             id: "e3", summary: "Cancelled",
             start: GCalEventDateTime(date: nil, dateTime: "2026-07-15T17:30:00-07:00", timeZone: nil),
             end: GCalEventDateTime(date: nil, dateTime: "2026-07-15T18:00:00-07:00", timeZone: nil),
-            status: "cancelled"
+            status: "cancelled", htmlLink: nil
         )
         XCTAssertNil(try CalendarEvent.from(g, calendarId: "cal1", colorHex: "#000", calendar: cal))
     }
