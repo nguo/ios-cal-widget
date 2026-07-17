@@ -5,8 +5,8 @@ import CalCore
 /// The small agenda widget: an "AGENDA" header with up/down paging buttons (top-right), then the
 /// current page's day-groups. Within a group, the day header opens the Google Calendar app to that
 /// day and each event row opens that event's detail view (see AgendaGroupView).
-/// The up button hides on the first page; the down button is always shown (it stops advancing at
-/// the last event). Reads an `AgendaEntry`; no networking here.
+/// The up button hides on the first page; the down button hides on the last page. Reads an
+/// `AgendaEntry`; no networking here.
 struct AgendaView: View {
     let entry: AgendaEntry
     /// False in a non-widget host (e.g. an in-app preview) where live intent buttons don't apply.
@@ -58,7 +58,7 @@ struct AgendaView: View {
                     if interactive && entry.canPageBack { pageButton(-1, "chevron.up") }
                 }
                 .overlay(alignment: .topTrailing) {
-                    if interactive { pageButton(1, "chevron.down") }
+                    if interactive && entry.canPageForward { pageButton(1, "chevron.down") }
                 }
             Rectangle()
                 .fill(Color.white.opacity(0.12))

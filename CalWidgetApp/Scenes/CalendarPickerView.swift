@@ -4,7 +4,6 @@ import CalCore
 struct CalendarPickerView: View {
     @EnvironmentObject private var auth: GoogleAuthService
     @StateObject private var sync = AppSyncManager()
-    @State private var previewOffset = 0
 
     var body: some View {
         List {
@@ -47,7 +46,7 @@ struct CalendarPickerView: View {
 
             Section {
                 CalendarGridView(
-                    entry: CalendarEntryBuilder.live(weekCount: 2, offsetOverride: previewOffset),
+                    entry: CalendarEntryBuilder.live(weekCount: 2),
                     interactive: false
                 )
                 .frame(height: 170) // ~systemMedium
@@ -55,19 +54,26 @@ struct CalendarPickerView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .listRowInsets(EdgeInsets())
                 .padding(.vertical, 4)
-                .id("\(sync.status)-\(previewOffset)") // rebuild after sync or page change
+                .id("grid-\(sync.status)") // rebuild after sync
 
                 HStack {
-                    Button { previewOffset -= 1 } label: { Image(systemName: "chevron.left") }
                     Spacer()
-                    Button("This week") { previewOffset = 0 }
+                    AgendaView(
+                        entry: AgendaEntryBuilder.live(),
+                        interactive: false
+                    )
+                    .frame(width: 170, height: 146) // ~systemSmall
+                    .background(Color.black)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                     Spacer()
-                    Button { previewOffset += 1 } label: { Image(systemName: "chevron.right") }
                 }
+                .listRowInsets(EdgeInsets())
+                .padding(.vertical, 4)
+                .id("agenda-\(sync.status)")
             } header: {
                 Text("Widget preview")
             } footer: {
-                Text("Live from your synced calendars. Use the arrows to page \u{00B1}2 weeks; empty means no events in that range.")
+                Text("Live from your synced calendars; empty means no events in that range.")
             }
         }
         .navigationTitle(auth.email ?? "Calendars")

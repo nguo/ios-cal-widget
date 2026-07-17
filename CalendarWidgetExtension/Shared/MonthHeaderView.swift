@@ -22,14 +22,14 @@ struct MonthHeaderView: View {
 
             Spacer(minLength: 0)
 
+            // While a paging/refresh fetch is in flight, disable + dim every control so the
+            // user can't stack more intents during the fetch delay.
             if let todayDayNumber {
-                control(intent: GoToTodayIntent()) { TodayIcon(day: todayDayNumber) }
+                control(intent: GoToTodayIntent(), disabled: isSyncing) { TodayIcon(day: todayDayNumber) }
             }
-            control(intent: ShiftWindowIntent(direction: -1)) { navGlyph("chevron.left") }
-            control(intent: ShiftWindowIntent(direction: 1)) { navGlyph("chevron.right") }
-            control(intent: RefreshNowIntent(), disabled: isSyncing) {
-                navGlyph("arrow.clockwise").opacity(isSyncing ? 0.35 : 1)
-            }
+            control(intent: ShiftWindowIntent(direction: -1), disabled: isSyncing) { navGlyph("chevron.left") }
+            control(intent: ShiftWindowIntent(direction: 1), disabled: isSyncing) { navGlyph("chevron.right") }
+            control(intent: RefreshNowIntent(), disabled: isSyncing) { navGlyph("arrow.clockwise") }
         }
     }
 
@@ -44,6 +44,7 @@ struct MonthHeaderView: View {
             Button(intent: intent, label: label)
                 .buttonStyle(.plain)
                 .disabled(disabled)
+                .opacity(disabled ? 0.35 : 1)
         } else {
             label()
         }

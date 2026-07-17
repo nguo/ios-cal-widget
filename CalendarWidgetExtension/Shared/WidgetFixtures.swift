@@ -75,6 +75,7 @@ enum WidgetFixtures {
             date: reference,
             groups: AgendaEntryBuilder.groups(from: ordered, offset: start),
             canPageBack: start > 0,
+            canPageForward: start < (bounds.last ?? 0),
             lastSyncedAt: reference
         )
     }

@@ -105,7 +105,7 @@ enum AgendaEntryBuilder {
         let store = AppGroupStore(suiteName: AppConfig.appGroupID)
 
         guard let cache = EventCache(appGroupIdentifier: AppConfig.appGroupID)?.read() else {
-            return AgendaEntry(date: reference, groups: [], canPageBack: false, lastSyncedAt: nil)
+            return AgendaEntry(date: reference, groups: [], canPageBack: false, canPageForward: false, lastSyncedAt: nil)
         }
 
         let ordered = orderedEvents(reference: reference, calendar: cal, cache: cache)
@@ -118,6 +118,7 @@ enum AgendaEntryBuilder {
             date: reference,
             groups: groups(from: ordered, offset: start),
             canPageBack: start > 0,
+            canPageForward: start < (bounds.last ?? 0), // a later page boundary exists
             lastSyncedAt: cache.generatedAt
         )
     }

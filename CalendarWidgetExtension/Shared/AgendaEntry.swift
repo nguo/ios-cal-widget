@@ -9,9 +9,10 @@ struct AgendaEntry: TimelineEntry {
     let date: Date
     /// The day-groups shown on the current page, in order. Empty when there's nothing to show.
     let groups: [AgendaDayGroup]
-    /// Whether an earlier page exists (event offset > 0) — drives the up button. The down button
-    /// is always shown; its bound is enforced by clamping the offset, not a flag.
+    /// Whether an earlier page exists (event offset > 0) — drives the up button.
     let canPageBack: Bool
+    /// Whether a later page exists — drives the down button, hiding it at the last event.
+    let canPageForward: Bool
     /// Cache generation time; nil means never synced (drives the sign-in prompt).
     let lastSyncedAt: Date?
 }
