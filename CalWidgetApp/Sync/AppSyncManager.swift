@@ -14,8 +14,6 @@ final class AppSyncManager: ObservableObject {
     /// Late-bound because SwiftUI `@StateObject` can't read `@EnvironmentObject` at init.
     private weak var auth: GoogleAuthService?
     private let api = GoogleCalendarAPIClient()
-    /// In-flight debounced resync scheduled by calendar-selection changes.
-    private var resyncTask: Task<Void, Never>?
 
     private var calendar: Calendar {
         var c = Calendar.current
@@ -25,53 +23,36 @@ final class AppSyncManager: ObservableObject {
 
     func rebind(auth: GoogleAuthService) { self.auth = auth }
 
-    /// Fetch the account's calendar list and reconcile with persisted selection.
+    /// Fetch the account's full calendar list. Every calendar is synced into the cache (a
+    /// superset); which of them a given widget shows is chosen per-instance in the widget's
+    /// edit sheet, so there's no app-level selection to reconcile here.
     func loadCalendars() async {
         guard let auth else { return }
         do {
             let token = try await auth.accessToken()
             let entries = try await api.calendarList(accessToken: token)
-            let selected = Set(AppGroupStore(suiteName: AppConfig.appGroupID)?.selectedCalendarIds ?? [])
             let email = auth.email ?? ""
             sources = entries.map { entry in
                 CalendarSource(
                     id: entry.id,
                     accountEmail: email,
                     summary: entry.summary ?? entry.id,
-                    colorHex: entry.backgroundColor ?? "#4285F4",
-                    isSelected: selected.contains(entry.id)
+                    colorHex: entry.backgroundColor ?? "#4285F4"
                 )
+            }
+            // First run has no cache, and the widget's calendar picker (and every widget) reads
+            // from it — so seed it now rather than making the user tap "Sync now" first. The
+            // extension-side foreground/background refresh can't do this: it derives the calendars
+            // to fetch from the existing cache, which doesn't exist yet.
+            if EventCache(appGroupIdentifier: AppConfig.appGroupID)?.read() == nil {
+                await syncNow()
             }
         } catch {
             status = "Failed to load calendars: \(error.localizedDescription)"
         }
     }
 
-    func toggle(_ id: String) {
-        guard let i = sources.firstIndex(where: { $0.id == id }) else { return }
-        sources[i].isSelected.toggle()
-        persistSelection()
-        scheduleResync()
-    }
-
-    /// Refetch so the widget's cache reflects the new calendar set. Debounced so toggling
-    /// several calendars in a row coalesces into one sync with the final selection rather than
-    /// firing (and racing) a full fetch per tap.
-    private func scheduleResync() {
-        resyncTask?.cancel()
-        resyncTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 400_000_000)
-            guard !Task.isCancelled else { return }
-            await self?.syncNow()
-        }
-    }
-
-    private func persistSelection() {
-        let ids = sources.filter { $0.isSelected }.map { $0.id }
-        AppGroupStore(suiteName: AppConfig.appGroupID)?.selectedCalendarIds = ids
-    }
-
-    /// Fetch across selected calendars and write the cache. Covers the canonical today/+2wk
+    /// Fetch across every calendar and write the cache. Covers the canonical today/+2wk
     /// window, the widget's currently-paged window, and any wider range pagination had already
     /// fetched — so an app-initiated sync never strands a paged widget on the stale banner.
     func syncNow() async {
@@ -97,7 +78,7 @@ final class AppSyncManager: ObservableObject {
             )
             try EventCache(appGroupIdentifier: AppConfig.appGroupID)?.write(cache)
             AppGroupStore(suiteName: AppConfig.appGroupID)?.lastSyncedAt = now
-            status = "Synced \(cache.events.count) events across \(sources.filter { $0.isSelected }.count) calendars."
+            status = "Synced \(cache.events.count) events across \(sources.count) calendars."
             WidgetCenter.shared.reloadAllTimelines() // refresh both the grid and agenda widgets
         } catch {
             status = "Sync failed: \(error.localizedDescription)"

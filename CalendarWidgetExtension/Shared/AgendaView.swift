@@ -21,7 +21,10 @@ struct AgendaView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             header
-            if entry.groups.isEmpty {
+            if entry.needsConfiguration {
+                configMessage
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            } else if entry.groups.isEmpty {
                 emptyMessage
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             } else {
@@ -97,7 +100,7 @@ struct AgendaView: View {
     }
 
     private func pageButton(_ direction: Int, _ systemName: String) -> some View {
-        Button(intent: AgendaPageIntent(direction: direction)) {
+        Button(intent: AgendaPageIntent(direction: direction, calendarIds: entry.calendarIds, showDeclined: entry.showDeclined)) {
             Image(systemName: systemName)
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(.white)
@@ -109,6 +112,14 @@ struct AgendaView: View {
 
     private var emptyMessage: some View {
         Text(entry.lastSyncedAt == nil ? "Open the app to sign in & sync" : "No upcoming events")
+            .font(.system(size: 13))
+            .multilineTextAlignment(.center)
+            .foregroundStyle(Color.white.opacity(0.5))
+    }
+
+    /// Shown when the widget has no calendars picked yet (long-press → Edit Widget).
+    private var configMessage: some View {
+        Text("Edit Widget to choose calendars")
             .font(.system(size: 13))
             .multilineTextAlignment(.center)
             .foregroundStyle(Color.white.opacity(0.5))

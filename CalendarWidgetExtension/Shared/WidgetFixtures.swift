@@ -34,8 +34,8 @@ enum WidgetFixtures {
         ]
 
         let sources = [
-            CalendarSource(id: "a", accountEmail: "me@example.com", summary: "Personal", colorHex: green, isSelected: true),
-            CalendarSource(id: "b", accountEmail: "me@example.com", summary: "Fun", colorHex: blue, isSelected: true)
+            CalendarSource(id: "a", accountEmail: "me@example.com", summary: "Personal", colorHex: green),
+            CalendarSource(id: "b", accountEmail: "me@example.com", summary: "Fun", colorHex: blue)
         ]
 
         return EventCacheData(
@@ -76,7 +76,8 @@ enum WidgetFixtures {
             groups: AgendaEntryBuilder.groups(from: ordered, offset: start),
             canPageBack: start > 0,
             canPageForward: start < (bounds.last ?? 0),
-            lastSyncedAt: reference
+            lastSyncedAt: reference,
+            calendarIds: nil
         )
     }
 }

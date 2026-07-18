@@ -233,10 +233,12 @@ func runSyncCheck() async {
     ])
     let api = GoogleCalendarAPIClient(transport: transport)
     let service = CalendarSyncService(api: api, calendar: cal)
+    // The cache is a superset: buildCache fetches every source passed in. calC has no
+    // events route, so it contributes nothing but is still retained as an available source.
     let sources = [
-        CalendarSource(id: "calA", accountEmail: "a@example.com", summary: "Personal", colorHex: "#0B8043", isSelected: true),
-        CalendarSource(id: "calB", accountEmail: "a@example.com", summary: "Fun", colorHex: "#D50000", isSelected: true),
-        CalendarSource(id: "calC", accountEmail: "a@example.com", summary: "Off", colorHex: "#000000", isSelected: false)
+        CalendarSource(id: "calA", accountEmail: "a@example.com", summary: "Personal", colorHex: "#0B8043"),
+        CalendarSource(id: "calB", accountEmail: "a@example.com", summary: "Fun", colorHex: "#D50000"),
+        CalendarSource(id: "calC", accountEmail: "a@example.com", summary: "Empty", colorHex: "#000000")
     ]
     let result = await service.buildCache(
         sources: sources,
@@ -245,8 +247,8 @@ func runSyncCheck() async {
         now: d(2026, 3, 10),
         tokenProvider: { _ in "fake-access-token" }
     )
-    eq(result.events.count, 2, "sync merged events from both selected calendars")
-    eq(result.sources.count, 2, "unselected calendar excluded from sources")
+    eq(result.events.count, 2, "sync merged events from the calendars that had events")
+    eq(result.sources.count, 3, "every passed calendar retained as an available source")
     eq(result.events.first { $0.id == "e1" }?.colorHex, "#0B8043", "event color denormalized from its source")
     eq(result.events.first { $0.id == "e2" }?.isAllDay, true, "all-day preserved through sync")
 }

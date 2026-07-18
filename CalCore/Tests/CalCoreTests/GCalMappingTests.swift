@@ -16,10 +16,11 @@ final class GCalMappingTests: XCTestCase {
             id: "e1", summary: "Meeting",
             start: GCalEventDateTime(date: nil, dateTime: "2026-07-15T17:30:00-07:00", timeZone: nil),
             end: GCalEventDateTime(date: nil, dateTime: "2026-07-15T18:00:00-07:00", timeZone: nil),
-            status: "confirmed", htmlLink: nil
+            status: "confirmed", htmlLink: nil, attendees: nil
         )
         let e = try XCTUnwrap(try CalendarEvent.from(g, calendarId: "cal1", colorHex: "#123456", calendar: cal))
         XCTAssertFalse(e.isAllDay)
+        XCTAssertFalse(e.isDeclined)
         XCTAssertEqual(EventTextFormatter.timePrefix(for: e, calendar: cal), "5:30p")
         XCTAssertEqual(e.colorHex, "#123456")
         XCTAssertEqual(e.title, "Meeting")
@@ -31,7 +32,7 @@ final class GCalMappingTests: XCTestCase {
             id: "e2", summary: "Holiday",
             start: GCalEventDateTime(date: "2026-07-15", dateTime: nil, timeZone: nil),
             end: GCalEventDateTime(date: "2026-07-16", dateTime: nil, timeZone: nil),
-            status: "confirmed", htmlLink: nil
+            status: "confirmed", htmlLink: nil, attendees: nil
         )
         let e = try XCTUnwrap(try CalendarEvent.from(g, calendarId: "cal1", colorHex: "#abcdef", calendar: cal))
         XCTAssertTrue(e.isAllDay)
@@ -47,7 +48,7 @@ final class GCalMappingTests: XCTestCase {
             id: "trip", summary: "Trip",
             start: GCalEventDateTime(date: "2026-07-15", dateTime: nil, timeZone: nil),
             end: GCalEventDateTime(date: "2026-07-18", dateTime: nil, timeZone: nil),
-            status: "confirmed", htmlLink: nil
+            status: "confirmed", htmlLink: nil, attendees: nil
         )
         let e = try XCTUnwrap(try CalendarEvent.from(g, calendarId: "cal1", colorHex: "#000", calendar: cal))
         for day in 15...17 {
@@ -61,9 +62,30 @@ final class GCalMappingTests: XCTestCase {
             id: "e3", summary: "Cancelled",
             start: GCalEventDateTime(date: nil, dateTime: "2026-07-15T17:30:00-07:00", timeZone: nil),
             end: GCalEventDateTime(date: nil, dateTime: "2026-07-15T18:00:00-07:00", timeZone: nil),
-            status: "cancelled", htmlLink: nil
+            status: "cancelled", htmlLink: nil, attendees: nil
         )
         XCTAssertNil(try CalendarEvent.from(g, calendarId: "cal1", colorHex: "#000", calendar: cal))
+    }
+
+    func testDeclinedBySelfAttendee() throws {
+        let start = GCalEventDateTime(date: nil, dateTime: "2026-07-15T17:30:00-07:00", timeZone: nil)
+        let end = GCalEventDateTime(date: nil, dateTime: "2026-07-15T18:00:00-07:00", timeZone: nil)
+        // Declined: our own row (self == true) is "declined"; another guest's status is ignored.
+        let declined = GCalEvent(
+            id: "d1", summary: "Skip", start: start, end: end, status: "confirmed", htmlLink: nil,
+            attendees: [
+                GCalAttendee(selfAttendee: false, responseStatus: "accepted"),
+                GCalAttendee(selfAttendee: true, responseStatus: "declined")
+            ]
+        )
+        let accepted = GCalEvent(
+            id: "d2", summary: "Attend", start: start, end: end, status: "confirmed", htmlLink: nil,
+            attendees: [GCalAttendee(selfAttendee: true, responseStatus: "accepted")]
+        )
+        let e1 = try XCTUnwrap(try CalendarEvent.from(declined, calendarId: "cal1", colorHex: "#000", calendar: cal))
+        let e2 = try XCTUnwrap(try CalendarEvent.from(accepted, calendarId: "cal1", colorHex: "#000", calendar: cal))
+        XCTAssertTrue(e1.isDeclined)
+        XCTAssertFalse(e2.isDeclined)
     }
 
     func testDecodeEventsListFixture() throws {

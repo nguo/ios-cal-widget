@@ -22,6 +22,11 @@ public struct CalendarEvent: Codable, Identifiable, Hashable, Sendable {
     /// exact event — the `eid` it carries is Google's own, avoiding fragile hand-encoding. Optional
     /// so events cached before this field existed (and non-Google sources) still decode.
     public let htmlLink: String?
+    /// True when the signed-in user has declined this event (their attendee `responseStatus` is
+    /// "declined"). Cached for every event; each widget decides whether to hide declined events or
+    /// show them struck through. Optional in the wire format so caches written before this field
+    /// existed still decode (see `init(from:)`).
+    public let isDeclined: Bool
 
     public init(
         id: String,
@@ -31,7 +36,8 @@ public struct CalendarEvent: Codable, Identifiable, Hashable, Sendable {
         endDate: Date,
         isAllDay: Bool,
         colorHex: String,
-        htmlLink: String? = nil
+        htmlLink: String? = nil,
+        isDeclined: Bool = false
     ) {
         self.id = id
         self.calendarId = calendarId
@@ -41,6 +47,26 @@ public struct CalendarEvent: Codable, Identifiable, Hashable, Sendable {
         self.isAllDay = isAllDay
         self.colorHex = colorHex
         self.htmlLink = htmlLink
+        self.isDeclined = isDeclined
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, calendarId, title, startDate, endDate, isAllDay, colorHex, htmlLink, isDeclined
+    }
+
+    /// Custom decode so `htmlLink` and `isDeclined` — both added after the cache format shipped —
+    /// tolerate older caches that omit them. Encoding stays synthesized.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        calendarId = try c.decode(String.self, forKey: .calendarId)
+        title = try c.decode(String.self, forKey: .title)
+        startDate = try c.decode(Date.self, forKey: .startDate)
+        endDate = try c.decode(Date.self, forKey: .endDate)
+        isAllDay = try c.decode(Bool.self, forKey: .isAllDay)
+        colorHex = try c.decode(String.self, forKey: .colorHex)
+        htmlLink = try c.decodeIfPresent(String.self, forKey: .htmlLink)
+        isDeclined = try c.decodeIfPresent(Bool.self, forKey: .isDeclined) ?? false
     }
 
     /// The last calendar day this event covers, inclusive. For all-day events the

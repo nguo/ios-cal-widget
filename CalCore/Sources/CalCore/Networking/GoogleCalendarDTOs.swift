@@ -34,6 +34,21 @@ public struct GCalEvent: Codable, Sendable {
     public let status: String?
     /// Google's canonical link to this event; carried through for the widget deep link.
     public let htmlLink: String?
+    /// Attendees, when present. We only read the signed-in user's own entry (`self == true`) to
+    /// learn whether they declined. Absent for events with no guests.
+    public let attendees: [GCalAttendee]?
+}
+
+/// One attendee on an event. `self` marks the signed-in user's own row; `responseStatus` is one
+/// of "needsAction" | "declined" | "tentative" | "accepted".
+public struct GCalAttendee: Codable, Sendable {
+    public let selfAttendee: Bool?
+    public let responseStatus: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case selfAttendee = "self" // `self` is reserved in Swift
+        case responseStatus
+    }
 }
 
 /// Google represents a boundary as EITHER `date` (all-day, no time) OR `dateTime` (timed).
@@ -96,6 +111,11 @@ public extension CalendarEvent {
             endDate = e
         }
 
+        // Declined = the signed-in user's own attendee row is "declined".
+        let isDeclined = gcal.attendees?.contains {
+            $0.selfAttendee == true && $0.responseStatus == "declined"
+        } ?? false
+
         return CalendarEvent(
             id: gcal.id,
             calendarId: calendarId,
@@ -104,7 +124,8 @@ public extension CalendarEvent {
             endDate: endDate,
             isAllDay: allDay,
             colorHex: colorHex,
-            htmlLink: gcal.htmlLink
+            htmlLink: gcal.htmlLink,
+            isDeclined: isDeclined
         )
     }
 

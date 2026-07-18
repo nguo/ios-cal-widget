@@ -10,6 +10,9 @@ enum WidgetStyle {
     /// Dim dark-blue fill behind today's date pill — reads as "today" without competing
     /// with the calendar event colors below it.
     static let todayPillBackground = Color(red: 0.11, green: 0.20, blue: 0.33) // ~#1C3355
+    /// Red used for declined events (title + strikethrough). Slightly desaturated so it reads as
+    /// "declined" without shouting over the dark widget background.
+    static let declinedColor = Color(red: 0.92, green: 0.35, blue: 0.35) // ~#EB5959
 
     // Row geometry shared between WeekRowView (bar offsets) and ColumnView (reserved space).
     static let dateHeight: CGFloat = 14

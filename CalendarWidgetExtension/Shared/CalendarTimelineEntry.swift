@@ -13,4 +13,7 @@ struct CalendarTimelineEntry: TimelineEntry {
     /// True while a sync is in flight (dims the refresh button).
     let isSyncing: Bool
     let lastSyncedAt: Date?
+    /// True when the widget has no calendars picked yet — drives the "Edit Widget to choose
+    /// calendars" prompt.
+    var needsConfiguration: Bool = false
 }

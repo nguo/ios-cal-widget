@@ -2,7 +2,8 @@ import Foundation
 
 /// Small typed wrapper over the App Group `UserDefaults`, shared between the app and the
 /// widget extension. Holds lightweight cross-process state: the pagination offset, an
-/// in-flight-sync flag, selected calendar ids, and the last successful sync time.
+/// in-flight-sync flag, and the last successful sync time. Calendar selection is no longer
+/// global — it's stored per-widget in each instance's configuration intent.
 ///
 /// `UserDefaults` is injectable so this is testable off-device with a throwaway suite.
 public struct AppGroupStore {
@@ -12,7 +13,6 @@ public struct AppGroupStore {
         static let twoWeekPageOffset = "twoWeekPageOffset"
         static let agendaEventOffset = "agendaEventOffset"
         static let isSyncing = "isSyncing"
-        static let selectedCalendarIds = "selectedCalendarIds"
         static let lastSyncedAt = "lastSyncedAt"
         static let accountEmail = "accountEmail"
         static let pendingDeepLink = "pendingDeepLink"
@@ -49,11 +49,6 @@ public struct AppGroupStore {
     public var isSyncing: Bool {
         get { defaults.bool(forKey: Key.isSyncing) }
         nonmutating set { defaults.set(newValue, forKey: Key.isSyncing) }
-    }
-
-    public var selectedCalendarIds: [String] {
-        get { defaults.stringArray(forKey: Key.selectedCalendarIds) ?? [] }
-        nonmutating set { defaults.set(newValue, forKey: Key.selectedCalendarIds) }
     }
 
     public var lastSyncedAt: Date? {

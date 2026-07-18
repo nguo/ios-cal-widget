@@ -46,7 +46,10 @@ struct CalendarGridView: View {
                 .frame(maxHeight: .infinity)
             }
 
-            if entry.cacheIsStale {
+            if entry.needsConfiguration {
+                configBanner
+                    .frame(maxWidth: .infinity, alignment: .center)
+            } else if entry.cacheIsStale {
                 staleBanner
                     .frame(maxWidth: .infinity, alignment: .center)
             }
@@ -71,6 +74,13 @@ struct CalendarGridView: View {
 
     private var staleBanner: some View {
         Text(entry.lastSyncedAt == nil ? "Open the app to sign in & sync" : "Tap refresh to load this range")
+            .font(.system(size: 9))
+            .foregroundStyle(Color.white.opacity(0.5))
+    }
+
+    /// Shown when the widget has no calendars picked yet (long-press → Edit Widget).
+    private var configBanner: some View {
+        Text("Edit Widget to choose calendars")
             .font(.system(size: 9))
             .foregroundStyle(Color.white.opacity(0.5))
     }

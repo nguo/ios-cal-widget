@@ -15,6 +15,15 @@ struct AgendaEntry: TimelineEntry {
     let canPageForward: Bool
     /// Cache generation time; nil means never synced (drives the sign-in prompt).
     let lastSyncedAt: Date?
+    /// This instance's calendar selection (nil ⇒ all). Carried so the paging button can hand it
+    /// to `AgendaPageIntent`, keeping its boundary math aligned with the filtered event list.
+    let calendarIds: Set<String>?
+    /// This instance's "show declined" setting. Carried for the same reason as `calendarIds`:
+    /// the paging button must compute boundaries over the same visible set.
+    var showDeclined: Bool = false
+    /// True when the widget has no calendars picked yet — drives the "Edit Widget to choose
+    /// calendars" prompt instead of an empty agenda.
+    var needsConfiguration: Bool = false
 }
 
 /// A day's events on a single agenda page. `isContinuation` is true when this day's header

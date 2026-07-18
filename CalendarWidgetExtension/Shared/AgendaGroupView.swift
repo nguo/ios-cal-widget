@@ -121,25 +121,32 @@ struct AgendaGroupView: View {
         }
     }
 
-    /// Timed: two lines (name, then time range) beside a color bar spanning both.
+    /// Timed: two lines (name, then time range) beside a color bar spanning both. Declined events
+    /// (shown only when the widget opts in) render in red with a strikethrough.
     private func timedRow(_ event: CalendarEvent) -> some View {
-        HStack(spacing: 5) {
+        let declined = event.isDeclined
+        return HStack(spacing: 5) {
             RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                .fill(Color(hex: event.colorHex))
+                .fill(declined ? WidgetStyle.declinedColor : Color(hex: event.colorHex))
                 .frame(width: 3)
                 .padding(.vertical, 2)
             VStack(alignment: .leading, spacing: 1) {
-                clippedLine(event.title, size: 12, weight: .medium, color: .white, height: 16)
+                clippedLine(event.title, size: 12, weight: .medium,
+                            color: declined ? WidgetStyle.declinedColor : .white, height: 16, strikethrough: declined)
                 clippedLine(EventTextFormatter.timeRange(for: event, calendar: calendar),
-                            size: 10, weight: .regular, color: Color.white.opacity(0.6), height: 12)
+                            size: 10, weight: .regular,
+                            color: declined ? WidgetStyle.declinedColor.opacity(0.7) : Color.white.opacity(0.6),
+                            height: 12, strikethrough: declined)
             }
         }
         .frame(height: WidgetStyle.agendaTimedRowHeight, alignment: .leading)
     }
 
-    /// All-day: one line (name) on a darkened color background bar, like the grid.
+    /// All-day: one line (name) on a darkened color background bar, like the grid. Declined events
+    /// dim the bar and render the title in red with a strikethrough.
     private func allDayRow(_ event: CalendarEvent) -> some View {
-        Color(hex: event.colorHex, brightness: 0.55)
+        let declined = event.isDeclined
+        return Color(hex: event.colorHex, brightness: declined ? 0.28 : 0.55)
             .frame(maxWidth: .infinity)
             .frame(height: WidgetStyle.agendaAllDayRowHeight - 2)
             .overlay(alignment: .leading) {
@@ -147,7 +154,8 @@ struct AgendaGroupView: View {
                     .font(.system(size: 12, weight: .medium))
                     .lineLimit(1)
                     .fixedSize()          // full title; overlay width can't widen the bar
-                    .foregroundStyle(.white)
+                    .strikethrough(declined)
+                    .foregroundStyle(declined ? WidgetStyle.declinedColor : .white)
                     .padding(.leading, 4)
             }
             .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
@@ -157,11 +165,12 @@ struct AgendaGroupView: View {
     /// Single line, truncated by hard clipping (no ellipsis). Uses `clippedGridRow`'s overlay
     /// trick so the text's natural width can't widen the row (the `.fixedSize().frame(maxWidth:)`
     /// approach propagates that width and stretches the whole widget — the bug this avoids).
-    private func clippedLine(_ string: String, size: CGFloat, weight: Font.Weight, color: Color, height: CGFloat) -> some View {
+    private func clippedLine(_ string: String, size: CGFloat, weight: Font.Weight, color: Color, height: CGFloat, strikethrough: Bool = false) -> some View {
         Text(string)
             .font(.system(size: size, weight: weight))
             .lineLimit(1)
             .fixedSize()
+            .strikethrough(strikethrough)
             .foregroundStyle(color)
             .clippedGridRow(height: height)
     }

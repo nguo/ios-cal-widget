@@ -16,10 +16,11 @@ public struct CalendarSyncService {
         self.calendar = calendar
     }
 
-    /// Builds the canonical cache for the given range across all selected sources.
-    /// Fetches calendars concurrently. A per-calendar failure is skipped (its events are
-    /// omitted) rather than failing the whole sync — partial data beats no data, and the
-    /// atomic write means the previous cache survives if the caller decides to abort.
+    /// Builds the canonical cache for the given range across *every* source passed in — the
+    /// cache is a superset of all available calendars, and each widget instance filters it to
+    /// its own selection at render. Fetches calendars concurrently. A per-calendar failure is
+    /// skipped (its events are omitted) rather than failing the whole sync — partial data beats
+    /// no data, and the atomic write means the previous cache survives if the caller aborts.
     public func buildCache(
         sources: [CalendarSource],
         rangeStart: Date,
@@ -27,10 +28,8 @@ public struct CalendarSyncService {
         now: Date,
         tokenProvider: @escaping AccessTokenProvider
     ) async -> EventCacheData {
-        let selected = sources.filter { $0.isSelected }
-
         let perCalendar: [[CalendarEvent]] = await withTaskGroup(of: [CalendarEvent].self) { group in
-            for source in selected {
+            for source in sources {
                 group.addTask {
                     await self.fetchEvents(for: source, rangeStart: rangeStart, rangeEnd: rangeEnd, tokenProvider: tokenProvider)
                 }
@@ -45,7 +44,7 @@ public struct CalendarSyncService {
             generatedAt: now,
             windowStart: rangeStart,
             windowEnd: rangeEnd,
-            sources: selected,
+            sources: sources,
             events: merged
         )
     }

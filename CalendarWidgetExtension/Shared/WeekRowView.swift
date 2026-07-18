@@ -47,15 +47,17 @@ struct WeekRowView: View {
             topTrailingRadius: seg.continuesRight ? 0 : r,
             style: .continuous
         )
+        let declined = seg.event.isDeclined
         return shape
-            .fill(Color(hex: seg.event.colorHex, brightness: 0.55))
+            .fill(Color(hex: seg.event.colorHex, brightness: declined ? 0.28 : 0.55))
             .frame(width: width, height: WidgetStyle.laneHeight - 1)
             .overlay(alignment: .leading) {
                 Text(seg.event.title)
                     .font(.system(size: 8, weight: .medium))
                     .lineLimit(1)
                     .fixedSize()               // full title; overlay width can't widen the bar
-                    .foregroundStyle(.white)
+                    .strikethrough(declined)
+                    .foregroundStyle(declined ? WidgetStyle.declinedColor : .white)
                     .padding(.leading, 3)
             }
             .clipShape(shape)                  // title spans the bar, hard-clipped at its end
@@ -106,12 +108,15 @@ struct ColumnView: View {
         switch row {
         case let .event(event):
             HStack(spacing: 3) {
-                Capsule().fill(Color(hex: event.colorHex)).frame(width: 2, height: 8)
+                Capsule()
+                    .fill(event.isDeclined ? WidgetStyle.declinedColor : Color(hex: event.colorHex))
+                    .frame(width: 2, height: 8)
                 Text(EventTextFormatter.line(for: event, calendar: calendar))
                     .font(.system(size: 8, weight: .medium))
                     .lineLimit(1)
                     .fixedSize()
-                    .foregroundStyle(.white)
+                    .strikethrough(event.isDeclined)
+                    .foregroundStyle(event.isDeclined ? WidgetStyle.declinedColor : .white)
             }
             .padding(.leading, 1)
             .clippedGridRow(height: WidgetStyle.timedRowHeight)

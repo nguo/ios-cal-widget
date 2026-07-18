@@ -21,11 +21,12 @@ enum CalendarEntryBuilder {
         return result
     }
 
-    /// Builds an entry from the shared cache. When there's no cache, returns an *empty* entry
-    /// (honest "no data" state) rather than sample fixtures — samples are reserved for the
-    /// widget placeholder / Xcode previews. `offsetOverride` lets the in-app preview page
-    /// independently of the shared offset the widget uses.
-    static func live(weekCount: Int, reference: Date = Date(), offsetOverride: Int? = nil) -> CalendarTimelineEntry {
+    /// Builds an entry from the shared cache, scoped to this widget instance's `calendarIds`
+    /// (nil ⇒ show every calendar). When there's no cache, returns an *empty* entry (honest
+    /// "no data" state) rather than sample fixtures — samples are reserved for the widget
+    /// placeholder / Xcode previews. `offsetOverride` lets the in-app preview page independently
+    /// of the shared offset the widget uses.
+    static func live(weekCount: Int, calendarIds: Set<String>? = nil, showDeclined: Bool = false, reference: Date = Date(), offsetOverride: Int? = nil) -> CalendarTimelineEntry {
         let cal = calendar()
         let store = AppGroupStore(suiteName: AppConfig.appGroupID)
         let offset = offsetOverride ?? store?.twoWeekPageOffset ?? 0
@@ -33,13 +34,23 @@ enum CalendarEntryBuilder {
         let window = DateWindow(referenceDate: reference, pageOffset: offset, weekCount: weekCount, calendar: cal)
 
         let cache = EventCache(appGroupIdentifier: AppConfig.appGroupID)?.read()
+        // A non-nil, empty selection means the widget hasn't been configured yet (nil = show all,
+        // used by the in-app preview). Prompt to configure — but only once synced, so a
+        // never-synced widget still shows the sign-in prompt.
+        let needsConfiguration = calendarIds?.isEmpty == true && cache != nil
+        let events: [CalendarEvent] = cache.map { c in
+            var e = calendarIds.map { ids in c.events.filter { ids.contains($0.calendarId) } } ?? c.events
+            if !showDeclined { e = e.filter { !$0.isDeclined } }
+            return e
+        } ?? []
         return CalendarTimelineEntry(
             date: reference,
             window: window,
-            eventsByDay: cache.map { groupByDay(events: $0.events, window: window, calendar: cal) } ?? [:],
+            eventsByDay: cache == nil ? [:] : groupByDay(events: events, window: window, calendar: cal),
             cacheIsStale: cache.map { !$0.covers(start: window.startDate, end: window.endExclusive) } ?? true,
             isSyncing: isSyncing,
-            lastSyncedAt: cache?.generatedAt
+            lastSyncedAt: cache?.generatedAt,
+            needsConfiguration: needsConfiguration
         )
     }
 }

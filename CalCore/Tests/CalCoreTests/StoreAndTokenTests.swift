@@ -29,13 +29,6 @@ final class AppGroupStoreTests: XCTestCase {
         store.isSyncing = true
         XCTAssertTrue(AppGroupStore(defaults: defaults).isSyncing)
     }
-
-    func testSelectedCalendarIdsRoundTrip() {
-        let store = AppGroupStore(defaults: defaults)
-        XCTAssertEqual(store.selectedCalendarIds, [])
-        store.selectedCalendarIds = ["a@group.calendar.google.com", "b"]
-        XCTAssertEqual(AppGroupStore(defaults: defaults).selectedCalendarIds, ["a@group.calendar.google.com", "b"])
-    }
 }
 
 final class TokenRefreshTests: XCTestCase {

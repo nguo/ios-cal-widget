@@ -6,7 +6,11 @@ import CalCore
 /// `AgendaView`; paging is handled by `AgendaPageIntent` buttons inside the view.
 struct AgendaWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: AppConfig.agendaWidgetKind, provider: AgendaTimelineProvider()) { entry in
+        AppIntentConfiguration(
+            kind: AppConfig.agendaWidgetKind,
+            intent: SelectCalendarsIntent.self,
+            provider: AgendaTimelineProvider()
+        ) { entry in
             AgendaView(entry: entry)
                 .containerBackground(.black, for: .widget)
         }

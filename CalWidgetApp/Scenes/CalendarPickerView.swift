@@ -8,28 +8,19 @@ struct CalendarPickerView: View {
     var body: some View {
         List {
             Section {
-                ForEach(sync.sources) { source in
-                    Button {
-                        sync.toggle(source.id)
-                    } label: {
-                        HStack {
-                            Circle()
-                                .fill(Color(hex: source.colorHex))
-                                .frame(width: 14, height: 14)
-                            Text(source.summary)
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            if source.isSelected {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(.tint)
-                            }
-                        }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("All your calendars stay synced automatically.")
+                    Text("Each widget shows the calendars you pick for it. To choose them, touch and hold a widget on your Home Screen, tap **Edit Widget**, then **Select Calendars**.")
+                        .foregroundStyle(.secondary)
+                    if !sync.status.isEmpty {
+                        Text(sync.status)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
                 }
+                .padding(.vertical, 4)
             } header: {
-                Text("Calendars")
-            } footer: {
-                if !sync.status.isEmpty { Text(sync.status) }
+                Text("Choosing calendars")
             }
 
             Section {

@@ -18,12 +18,23 @@ enum AgendaEntryBuilder {
     /// All events from today forward through the horizon, in display order (day ascending, then
     /// all-day-first / timed-ascending within a day), paired with the day they're shown under.
     /// Empty days contribute nothing. A multi-day event appears under each day it covers.
-    static func orderedEvents(reference: Date, calendar: Calendar, cache: EventCacheData) -> [(day: Date, event: CalendarEvent)] {
+    /// `calendarIds` restricts to that per-widget selection (nil ⇒ every calendar in the cache).
+    /// `showDeclined` keeps declined events in the list (they render struck through); when false
+    /// they're dropped entirely.
+    static func orderedEvents(
+        reference: Date,
+        calendar: Calendar,
+        cache: EventCacheData,
+        calendarIds: Set<String>? = nil,
+        showDeclined: Bool = true
+    ) -> [(day: Date, event: CalendarEvent)] {
         let today = calendar.startOfDay(for: reference)
+        var events = calendarIds.map { ids in cache.events.filter { ids.contains($0.calendarId) } } ?? cache.events
+        if !showDeclined { events = events.filter { !$0.isDeclined } }
         var result: [(day: Date, event: CalendarEvent)] = []
         for offset in 0 ..< AppConfig.agendaHorizonDays {
             guard let day = calendar.date(byAdding: .day, value: offset, to: today) else { continue }
-            let dayEvents = cache.events.filter { $0.covers(day: day, calendar: calendar) }
+            let dayEvents = events.filter { $0.covers(day: day, calendar: calendar) }
             for event in sortedForDay(dayEvents) {
                 // Hide timed events that have already ended (all-day + future days unaffected).
                 if !event.isAllDay && event.endDate <= reference { continue }
@@ -36,8 +47,12 @@ enum AgendaEntryBuilder {
     /// The instants between `after` and `before` at which a currently-visible timed event ends —
     /// i.e. the future moments the agenda's contents change. Used to schedule timeline reload points
     /// so an event drops off the widget the minute it's over. Sorted ascending, deduplicated.
-    static func upcomingEndTimes(after: Date, before: Date, cache: EventCacheData) -> [Date] {
+    /// `calendarIds` scopes to the widget's selection so reloads track only its visible events;
+    /// `showDeclined` mirrors the render filter so a hidden declined event doesn't schedule a reload.
+    static func upcomingEndTimes(after: Date, before: Date, cache: EventCacheData, calendarIds: Set<String>? = nil, showDeclined: Bool = true) -> [Date] {
         let ends = cache.events
+            .filter { calendarIds?.contains($0.calendarId) ?? true }
+            .filter { showDeclined || !$0.isDeclined }
             .filter { !$0.isAllDay && $0.endDate > after && $0.endDate < before }
             .map(\.endDate)
         return Array(Set(ends)).sorted()
@@ -110,17 +125,27 @@ enum AgendaEntryBuilder {
         return result
     }
 
-    /// Builds an entry from the shared cache. `offsetOverride` lets previews page independently
-    /// of the shared offset the widget uses.
-    static func live(reference: Date = Date(), offsetOverride: Int? = nil) -> AgendaEntry {
+    /// Builds an entry from the shared cache, scoped to this widget instance's `calendarIds`
+    /// (nil ⇒ show every calendar). `offsetOverride` lets previews page independently of the
+    /// shared offset the widget uses.
+    static func live(calendarIds: Set<String>? = nil, showDeclined: Bool = false, reference: Date = Date(), offsetOverride: Int? = nil) -> AgendaEntry {
         let cal = calendar()
         let store = AppGroupStore(suiteName: AppConfig.appGroupID)
+        let cache = EventCache(appGroupIdentifier: AppConfig.appGroupID)?.read()
+        // A non-nil, empty selection means the widget hasn't been configured yet (nil = show all,
+        // used by previews). Prompt to configure — but only once synced, so a never-synced widget
+        // still shows the sign-in prompt (you can't pick calendars before they exist).
+        let needsConfiguration = calendarIds?.isEmpty == true && cache != nil
 
-        guard let cache = EventCache(appGroupIdentifier: AppConfig.appGroupID)?.read() else {
-            return AgendaEntry(date: reference, groups: [], canPageBack: false, canPageForward: false, lastSyncedAt: nil)
+        guard let cache, !needsConfiguration else {
+            return AgendaEntry(
+                date: reference, groups: [], canPageBack: false, canPageForward: false,
+                lastSyncedAt: cache?.generatedAt, calendarIds: calendarIds,
+                showDeclined: showDeclined, needsConfiguration: needsConfiguration
+            )
         }
 
-        let ordered = orderedEvents(reference: reference, calendar: cal, cache: cache)
+        let ordered = orderedEvents(reference: reference, calendar: cal, cache: cache, calendarIds: calendarIds, showDeclined: showDeclined)
         let stored = offsetOverride ?? store?.agendaEventOffset ?? 0
         // Snap to the nearest page boundary ≤ the stored offset (it may drift after a re-sync).
         let bounds = boundaries(ordered)
@@ -131,7 +156,10 @@ enum AgendaEntryBuilder {
             groups: groups(from: ordered, offset: start),
             canPageBack: start > 0,
             canPageForward: start < (bounds.last ?? 0), // a later page boundary exists
-            lastSyncedAt: cache.generatedAt
+            lastSyncedAt: cache.generatedAt,
+            calendarIds: calendarIds,
+            showDeclined: showDeclined,
+            needsConfiguration: false
         )
     }
 }

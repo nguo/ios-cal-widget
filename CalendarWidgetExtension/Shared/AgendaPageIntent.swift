@@ -15,16 +15,31 @@ struct AgendaPageIntent: AppIntent {
     @Parameter(title: "Direction")
     var direction: Int
 
+    /// The requesting widget instance's calendar selection (empty ⇒ all). Kept so the page
+    /// boundaries computed here match the filtered list the widget actually shows.
+    @Parameter(title: "Calendars")
+    var calendarIds: [String]
+
+    /// The requesting instance's "show declined" setting — same reason: boundaries must be
+    /// computed over the same visible set the widget renders.
+    @Parameter(title: "Show declined", default: false)
+    var showDeclined: Bool
+
     init() {}
-    init(direction: Int) { self.direction = direction }
+    init(direction: Int, calendarIds: Set<String>? = nil, showDeclined: Bool = false) {
+        self.direction = direction
+        self.calendarIds = calendarIds.map(Array.init) ?? []
+        self.showDeclined = showDeclined
+    }
 
     func perform() async throws -> some IntentResult {
         guard let store = AppGroupStore(suiteName: AppConfig.appGroupID) else { return .result() }
         var cal = Calendar.current
         cal.firstWeekday = 1
 
+        let ids = calendarIds.isEmpty ? nil : Set(calendarIds)
         let ordered = EventCache(appGroupIdentifier: AppConfig.appGroupID)?.read()
-            .map { AgendaEntryBuilder.orderedEvents(reference: Date(), calendar: cal, cache: $0) } ?? []
+            .map { AgendaEntryBuilder.orderedEvents(reference: Date(), calendar: cal, cache: $0, calendarIds: ids, showDeclined: showDeclined) } ?? []
         let bounds = AgendaEntryBuilder.boundaries(ordered)
 
         // Current page index (largest boundary ≤ the stored offset), then step one page.

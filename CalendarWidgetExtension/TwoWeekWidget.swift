@@ -7,7 +7,11 @@ import CalCore
 /// `CalendarGridView`. A future OneWeekWidget/ThreeWeekWidget would mirror this file.
 struct TwoWeekWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: AppConfig.twoWeekWidgetKind, provider: CalendarTimelineProvider(weekCount: 2)) { entry in
+        AppIntentConfiguration(
+            kind: AppConfig.twoWeekWidgetKind,
+            intent: SelectCalendarsIntent.self,
+            provider: CalendarTimelineProvider(weekCount: 2)
+        ) { entry in
             CalendarGridView(entry: entry)
                 .containerBackground(.black, for: .widget)
         }
