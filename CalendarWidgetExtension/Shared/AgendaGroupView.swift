@@ -56,7 +56,11 @@ struct AgendaGroupView: View {
                 dayHeader
                     .frame(height: WidgetStyle.agendaDayHeaderHeight, alignment: .leading)
             }
-            ForEach(group.events) { event in
+            // Keyed by position, not by event: `CalendarEvent.id` is Google's event id, which is
+            // NOT unique here — being invited on two connected accounts caches the same event once
+            // per calendar, so both land in this group with the same id. Handing ForEach duplicate
+            // ids renders the first row twice, showing the second event in the wrong color.
+            ForEach(Array(group.events.enumerated()), id: \.offset) { _, event in
                 deepLinkRow(url: eventDestination(event)) {
                     eventRow(event)
                 }
