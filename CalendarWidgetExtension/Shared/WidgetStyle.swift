@@ -39,10 +39,34 @@ enum WidgetStyle {
         smallWidgetHeight() - agendaChrome
     }
 
+    // Medium agenda widget geometry. Uniform two-line event cards in the right column, a fixed
+    // date column, and a slim paging rail on the left. AgendaMediumView renders to these and
+    // AgendaPageSizing.fixedCount pages by them, so they MUST stay in sync.
+    static let agendaMediumRowHeight: CGFloat = 32
+    static let agendaMediumRowSpacing: CGFloat = 4
+    static let agendaMediumDateColumnWidth: CGFloat = 44
+    static let agendaMediumRailWidth: CGFloat = 32
+    static let agendaMediumRailButtonSize: CGFloat = 26
+    // The date column's two lines are pinned to explicit heights summing to the row height, so the
+    // stacked weekday/day-number can't overflow its row and get cropped.
+    static let agendaMediumWeekdayHeight: CGFloat = 11
+    static let agendaMediumDayNumberHeight: CGFloat = 21
+    /// Outer padding (top + bottom) — the medium layout has no header chrome above the rows.
+    static let agendaMediumChrome: CGFloat = 16
+
+    /// Events per page on the medium widget: whole cards that fit this device's widget height.
+    /// `systemMedium` is the same height as `systemSmall` on iOS, so the same bucketed estimate
+    /// applies. The trailing `+ spacing` accounts for the last row having no gap after it.
+    static var agendaMediumRowsPerPage: Int {
+        let budget = smallWidgetHeight() - agendaMediumChrome
+        let pitch = agendaMediumRowHeight + agendaMediumRowSpacing
+        return max(Int((budget + agendaMediumRowSpacing) / pitch), 1)
+    }
+
     /// systemSmall widget point-height for the current device, bucketed by screen long-side.
     /// Values are approximate — verify on real hardware and adjust. Falls back to a mid value
     /// off-device (e.g. previews).
-    private static func smallWidgetHeight() -> CGFloat {
+    static func smallWidgetHeight() -> CGFloat {
         #if canImport(UIKit)
         let longSide = max(UIScreen.main.bounds.width, UIScreen.main.bounds.height)
         switch longSide {

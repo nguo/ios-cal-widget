@@ -63,17 +63,19 @@ enum WidgetFixtures {
         )
     }
 
-    /// A ready-to-render agenda entry for SwiftUI/widget previews. `eventOffset` selects the page.
-    static func agendaEntry(eventOffset: Int = 0, reference: Date = Date()) -> AgendaEntry {
+    /// A ready-to-render agenda entry for SwiftUI/widget previews. `eventOffset` selects the page;
+    /// `variant` picks the page sizing so a medium preview breaks pages where the medium widget does.
+    static func agendaEntry(eventOffset: Int = 0, variant: AgendaVariant = .small, reference: Date = Date()) -> AgendaEntry {
         var cal = Calendar.current
         cal.firstWeekday = 1
         let data = cache(calendar: cal, reference: reference)
         let ordered = AgendaEntryBuilder.orderedEvents(reference: reference, calendar: cal, cache: data)
-        let bounds = AgendaEntryBuilder.boundaries(ordered)
+        let sizing = variant.pageSizing
+        let bounds = AgendaEntryBuilder.boundaries(ordered, sizing: sizing)
         let start = bounds.last(where: { $0 <= eventOffset }) ?? 0
         return AgendaEntry(
             date: reference,
-            groups: AgendaEntryBuilder.groups(from: ordered, offset: start),
+            groups: AgendaEntryBuilder.groups(from: ordered, offset: start, sizing: sizing),
             canPageBack: start > 0,
             canPageForward: start < (bounds.last ?? 0),
             lastSyncedAt: reference,

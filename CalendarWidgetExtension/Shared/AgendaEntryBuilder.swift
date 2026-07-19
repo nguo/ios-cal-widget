@@ -1,13 +1,11 @@
 import Foundation
-import CoreGraphics
 import CalCore
 
 /// Builds an `AgendaEntry` from the shared App Group state (event offset + cached events).
 /// The agenda is a forward-ordered, gap-free list of events (empty days are skipped); paging
 /// moves by whole events, so a day's events can span pages (continuation headers). Every event
-/// is shown — the agenda never truncates. How many events fit a page is computed from row
-/// heights (`WidgetStyle`) against a height budget, so it varies with content (all-day rows are
-/// shorter than timed; each new day adds a header). Does no networking — reads only the cache.
+/// is shown — the agenda never truncates. How many events fit a page is decided by the widget
+/// variant's `AgendaPageSizing`. Does no networking — reads only the cache.
 enum AgendaEntryBuilder {
     static func calendar() -> Calendar {
         var c = Calendar.current
@@ -67,47 +65,25 @@ enum AgendaEntryBuilder {
         return allDay + timed
     }
 
-    /// How many events (starting at `start`) fit one page's height budget. Each event costs its
-    /// row height (all-day vs timed) plus a day-header whenever the day changes — and the first
-    /// event on a page always gets a header (its group leads the page, possibly as "(cont)").
-    /// Always returns ≥ 1 so a lone oversized event still shows (it just clips).
-    static func eventsThatFit(_ ordered: [(day: Date, event: CalendarEvent)], from start: Int) -> Int {
-        var used: CGFloat = 0
-        var count = 0
-        var lastDay: Date?
-        var i = start
-        while i < ordered.count {
-            let (day, event) = ordered[i]
-            var cost = event.isAllDay ? WidgetStyle.agendaAllDayRowHeight : WidgetStyle.agendaTimedRowHeight
-            if day != lastDay { cost += WidgetStyle.agendaDayHeaderHeight }
-            if count > 0 && used + cost > WidgetStyle.agendaPageBudget { break }
-            used += cost
-            lastDay = day
-            count += 1
-            i += 1
-        }
-        return max(count, 1)
-    }
-
-    /// Deterministic page-start offsets `[0, f0, f0+f1, …]` walking `eventsThatFit` from 0.
-    /// Fixed page starts keep forward/back paging consistent. Always non-empty (`[0]` when there
-    /// are no events).
-    static func boundaries(_ ordered: [(day: Date, event: CalendarEvent)]) -> [Int] {
+    /// Deterministic page-start offsets `[0, f0, f0+f1, …]` walking the variant's page sizing
+    /// from 0. Fixed page starts keep forward/back paging consistent. Always non-empty (`[0]`
+    /// when there are no events).
+    static func boundaries(_ ordered: [(day: Date, event: CalendarEvent)], sizing: AgendaPageSizing = .heightFit) -> [Int] {
         guard !ordered.isEmpty else { return [0] }
         var result: [Int] = []
         var i = 0
         while i < ordered.count {
             result.append(i)
-            i += eventsThatFit(ordered, from: i)
+            i += sizing.eventsThatFit(ordered, from: i)
         }
         return result
     }
 
     /// Groups the current page's ordered slice into day-groups, flagging a leading continuation
     /// when the page opens mid-day (the day's header showed on the previous page).
-    static func groups(from ordered: [(day: Date, event: CalendarEvent)], offset: Int) -> [AgendaDayGroup] {
+    static func groups(from ordered: [(day: Date, event: CalendarEvent)], offset: Int, sizing: AgendaPageSizing = .heightFit) -> [AgendaDayGroup] {
         guard offset < ordered.count else { return [] }
-        let count = eventsThatFit(ordered, from: offset)
+        let count = sizing.eventsThatFit(ordered, from: offset)
         let slice = ordered[offset ..< min(offset + count, ordered.count)]
 
         var result: [AgendaDayGroup] = []
@@ -126,9 +102,9 @@ enum AgendaEntryBuilder {
     }
 
     /// Builds an entry from the shared cache, scoped to this widget instance's `calendarIds`
-    /// (nil ⇒ show every calendar). `offsetOverride` lets previews page independently of the
-    /// shared offset the widget uses.
-    static func live(calendarIds: Set<String>? = nil, showDeclined: Bool = false, reference: Date = Date(), offsetOverride: Int? = nil) -> AgendaEntry {
+    /// (nil ⇒ show every calendar). `variant` selects which widget's stored page offset and page
+    /// sizing to use. `offsetOverride` lets previews page independently of the stored offset.
+    static func live(calendarIds: Set<String>? = nil, showDeclined: Bool = false, variant: AgendaVariant = .small, reference: Date = Date(), offsetOverride: Int? = nil) -> AgendaEntry {
         let cal = calendar()
         let store = AppGroupStore(suiteName: AppConfig.appGroupID)
         let cache = EventCache(appGroupIdentifier: AppConfig.appGroupID)?.read()
@@ -146,14 +122,15 @@ enum AgendaEntryBuilder {
         }
 
         let ordered = orderedEvents(reference: reference, calendar: cal, cache: cache, calendarIds: calendarIds, showDeclined: showDeclined)
-        let stored = offsetOverride ?? store?.agendaEventOffset ?? 0
+        let sizing = variant.pageSizing
+        let stored = offsetOverride ?? store.map { variant.eventOffset(in: $0) } ?? 0
         // Snap to the nearest page boundary ≤ the stored offset (it may drift after a re-sync).
-        let bounds = boundaries(ordered)
+        let bounds = boundaries(ordered, sizing: sizing)
         let start = bounds.last(where: { $0 <= stored }) ?? 0
 
         return AgendaEntry(
             date: reference,
-            groups: groups(from: ordered, offset: start),
+            groups: groups(from: ordered, offset: start, sizing: sizing),
             canPageBack: start > 0,
             canPageForward: start < (bounds.last ?? 0), // a later page boundary exists
             lastSyncedAt: cache.generatedAt,

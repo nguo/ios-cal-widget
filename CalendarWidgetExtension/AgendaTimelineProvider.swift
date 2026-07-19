@@ -2,17 +2,22 @@ import WidgetKit
 import Foundation
 import CalCore
 
-/// Reads the pre-built cache + shared agenda offset and produces timeline entries, scoped to
-/// this widget instance's calendar selection (`SelectCalendarsIntent`). Does no networking —
-/// the render path only touches the App Group cache.
+/// Reads the pre-built cache + that variant's stored agenda offset and produces timeline entries,
+/// scoped to this widget instance's calendar selection (`SelectCalendarsIntent`). Does no
+/// networking — the render path only touches the App Group cache.
+///
+/// Shared by both agenda widgets; `variant` selects the offset key and the page sizing.
 struct AgendaTimelineProvider: AppIntentTimelineProvider {
+    var variant: AgendaVariant = .small
+
     func placeholder(in context: Context) -> AgendaEntry {
         // Placeholder always uses sample data (real cache may not exist in the gallery).
-        WidgetFixtures.agendaEntry()
+        WidgetFixtures.agendaEntry(variant: variant)
     }
 
     func snapshot(for configuration: SelectCalendarsIntent, in context: Context) async -> AgendaEntry {
-        AgendaEntryBuilder.live(calendarIds: configuration.selectedCalendarIds, showDeclined: configuration.showDeclinedEvents)
+        AgendaEntryBuilder.live(calendarIds: configuration.selectedCalendarIds,
+                                showDeclined: configuration.showDeclinedEvents, variant: variant)
     }
 
     func timeline(for configuration: SelectCalendarsIntent, in context: Context) async -> Timeline<AgendaEntry> {
@@ -31,7 +36,9 @@ struct AgendaTimelineProvider: AppIntentTimelineProvider {
         if let cache = EventCache(appGroupIdentifier: AppConfig.appGroupID)?.read() {
             references += AgendaEntryBuilder.upcomingEndTimes(after: now, before: tomorrow, cache: cache, calendarIds: ids, showDeclined: showDeclined)
         }
-        let entries = references.map { AgendaEntryBuilder.live(calendarIds: ids, showDeclined: showDeclined, reference: $0) }
+        let entries = references.map {
+            AgendaEntryBuilder.live(calendarIds: ids, showDeclined: showDeclined, variant: variant, reference: $0)
+        }
 
         return Timeline(entries: entries, policy: .after(tomorrow))
     }

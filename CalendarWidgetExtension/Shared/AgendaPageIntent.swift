@@ -25,28 +25,36 @@ struct AgendaPageIntent: AppIntent {
     @Parameter(title: "Show declined", default: false)
     var showDeclined: Bool
 
+    /// Which agenda widget is asking (`AgendaVariant` raw value). Selects the offset key to move,
+    /// the page sizing to compute boundaries with, and the widget kind to reload — the two agenda
+    /// widgets page independently.
+    @Parameter(title: "Variant", default: "small")
+    var variant: String
+
     init() {}
-    init(direction: Int, calendarIds: Set<String>? = nil, showDeclined: Bool = false) {
+    init(direction: Int, calendarIds: Set<String>? = nil, showDeclined: Bool = false, variant: AgendaVariant = .small) {
         self.direction = direction
         self.calendarIds = calendarIds.map(Array.init) ?? []
         self.showDeclined = showDeclined
+        self.variant = variant.rawValue
     }
 
     func perform() async throws -> some IntentResult {
         guard let store = AppGroupStore(suiteName: AppConfig.appGroupID) else { return .result() }
+        let agenda = AgendaVariant(rawValue: variant) ?? .small
         var cal = Calendar.current
         cal.firstWeekday = 1
 
         let ids = calendarIds.isEmpty ? nil : Set(calendarIds)
         let ordered = EventCache(appGroupIdentifier: AppConfig.appGroupID)?.read()
             .map { AgendaEntryBuilder.orderedEvents(reference: Date(), calendar: cal, cache: $0, calendarIds: ids, showDeclined: showDeclined) } ?? []
-        let bounds = AgendaEntryBuilder.boundaries(ordered)
+        let bounds = AgendaEntryBuilder.boundaries(ordered, sizing: agenda.pageSizing)
 
         // Current page index (largest boundary ≤ the stored offset), then step one page.
-        let current = bounds.lastIndex(where: { $0 <= store.agendaEventOffset }) ?? 0
+        let current = bounds.lastIndex(where: { $0 <= agenda.eventOffset(in: store) }) ?? 0
         let next = min(max(current + direction, 0), bounds.count - 1)
-        store.agendaEventOffset = bounds[next]
-        WidgetCenter.shared.reloadTimelines(ofKind: AppConfig.agendaWidgetKind)
+        agenda.setEventOffset(bounds[next], in: store)
+        WidgetCenter.shared.reloadTimelines(ofKind: agenda.widgetKind)
         return .result()
     }
 }
@@ -57,9 +65,19 @@ struct AgendaGoToStartIntent: AppIntent {
     static var title: LocalizedStringResource = "Agenda First Page"
     static var isDiscoverable: Bool = false
 
+    /// Which agenda widget is asking (`AgendaVariant` raw value).
+    @Parameter(title: "Variant", default: "small")
+    var variant: String
+
+    init() {}
+    init(variant: AgendaVariant = .small) { self.variant = variant.rawValue }
+
     func perform() async throws -> some IntentResult {
-        AppGroupStore(suiteName: AppConfig.appGroupID)?.agendaEventOffset = 0
-        WidgetCenter.shared.reloadTimelines(ofKind: AppConfig.agendaWidgetKind)
+        let agenda = AgendaVariant(rawValue: variant) ?? .small
+        if let store = AppGroupStore(suiteName: AppConfig.appGroupID) {
+            agenda.setEventOffset(0, in: store)
+        }
+        WidgetCenter.shared.reloadTimelines(ofKind: agenda.widgetKind)
         return .result()
     }
 }

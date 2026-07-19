@@ -11,6 +11,9 @@ public enum AppConfig {
     /// WidgetKit `kind` for the scrolling agenda widget.
     public static let agendaWidgetKind = "AgendaWidget"
 
+    /// WidgetKit `kind` for the medium (three-column) agenda widget.
+    public static let agendaMediumWidgetKind = "AgendaMediumWidget"
+
     /// Agenda widget: how many days forward the agenda covers, starting at today. Aligned with
     /// the canonical cache window so the agenda shows everything cached without its own fetch.
     public static let agendaHorizonDays = 14

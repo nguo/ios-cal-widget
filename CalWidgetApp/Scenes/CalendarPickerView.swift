@@ -61,6 +61,17 @@ struct CalendarPickerView: View {
                 .listRowInsets(EdgeInsets())
                 .padding(.vertical, 4)
                 .id("agenda-\(sync.status)")
+
+                AgendaMediumView(
+                    entry: AgendaEntryBuilder.live(variant: .medium),
+                    interactive: false
+                )
+                .frame(height: 170) // ~systemMedium
+                .background(Color.black)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .listRowInsets(EdgeInsets())
+                .padding(.vertical, 4)
+                .id("agenda-medium-\(sync.status)")
             } header: {
                 Text("Widget preview")
             } footer: {

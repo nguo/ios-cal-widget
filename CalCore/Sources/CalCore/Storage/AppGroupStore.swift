@@ -12,6 +12,7 @@ public struct AppGroupStore {
     private enum Key {
         static let twoWeekPageOffset = "twoWeekPageOffset"
         static let agendaEventOffset = "agendaEventOffset"
+        static let agendaMediumEventOffset = "agendaMediumEventOffset"
         static let isSyncing = "isSyncing"
         static let lastSyncedAt = "lastSyncedAt"
         static let accountEmail = "accountEmail"
@@ -42,6 +43,14 @@ public struct AppGroupStore {
     public var agendaEventOffset: Int {
         get { defaults.integer(forKey: Key.agendaEventOffset) }
         nonmutating set { defaults.set(newValue, forKey: Key.agendaEventOffset) }
+    }
+
+    /// The medium agenda widget's own pagination offset. Deliberately a separate key from
+    /// `agendaEventOffset`: the two agenda widgets fit a different number of events per page, so
+    /// sharing one offset would page them in lockstep against mismatched boundaries.
+    public var agendaMediumEventOffset: Int {
+        get { defaults.integer(forKey: Key.agendaMediumEventOffset) }
+        nonmutating set { defaults.set(newValue, forKey: Key.agendaMediumEventOffset) }
     }
 
     /// True while a sync is in flight. Read by `RefreshNowIntent` (to no-op on double-tap)
