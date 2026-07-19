@@ -43,7 +43,7 @@ enum WidgetStyle {
     // date column, and a slim paging rail on the left. AgendaMediumView renders to these and
     // AgendaPageSizing.fixedCount pages by them, so they MUST stay in sync.
     static let agendaMediumRowHeight: CGFloat = 32
-    static let agendaMediumRowSpacing: CGFloat = 4
+    static let agendaMediumRowSpacing: CGFloat = 3
     static let agendaMediumDateColumnWidth: CGFloat = 44
     static let agendaMediumRailWidth: CGFloat = 32
     static let agendaMediumRailButtonSize: CGFloat = 26
@@ -52,7 +52,9 @@ enum WidgetStyle {
     static let agendaMediumWeekdayHeight: CGFloat = 11
     static let agendaMediumDayNumberHeight: CGFloat = 21
     /// Outer padding (top + bottom) — the medium layout has no header chrome above the rows.
-    static let agendaMediumChrome: CGFloat = 16
+    /// Kept tight (4pt a side) so a 4th card fits the smaller phones; the leftover on big screens
+    /// is split evenly above/below the rows rather than pooling at the bottom.
+    static let agendaMediumChrome: CGFloat = 8
 
     /// Events per page on the medium widget: whole cards that fit this device's widget height.
     /// `systemMedium` is the same height as `systemSmall` on iOS, so the same bucketed estimate

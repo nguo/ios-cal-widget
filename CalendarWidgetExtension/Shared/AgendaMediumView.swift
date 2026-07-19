@@ -61,15 +61,17 @@ struct AgendaMediumView: View {
                         rowView(row)
                     }
                 }
-                // Claim the space and hard-clip our own overflow, so a full page can't grow past
-                // the widget and get vertically centered.
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                // Claim the space and hard-clip our own overflow so a full page can't grow past the
+                // widget. Centered vertically: the page never fills the budget exactly (the row
+                // count is a floor), and the remainder reads better split above/below than pooled
+                // at the bottom. A page that does overflow is cropped top and bottom alike.
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 .clipped()
             }
         }
-        .padding(.leading, 4)
-        .padding(.trailing, 8)
-        .padding(.vertical, 8)
+        .padding(.leading, 6)
+        .padding(.trailing, 10)
+        .padding(.vertical, 4) // WidgetStyle.agendaMediumChrome — paging math assumes this total
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .transaction { $0.animation = nil }
         .contentTransition(.identity)
