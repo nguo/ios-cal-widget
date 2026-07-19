@@ -1,8 +1,9 @@
 import Foundation
 import CalCore
 
-/// Sample data for placeholders and SwiftUI previews. Events are positioned relative to
-/// "today" so they always fall inside the current window.
+/// Sample data for widget placeholders, the gallery snapshot, the in-app widget preview, and
+/// SwiftUI previews. Events are positioned relative to "today" so they always fall inside the
+/// current window.
 enum WidgetFixtures {
     static let blue = "#4285F4"
     static let green = "#0B8043"

@@ -37,7 +37,7 @@ struct CalendarPickerView: View {
 
             Section {
                 CalendarGridView(
-                    entry: CalendarEntryBuilder.live(weekCount: 2),
+                    entry: WidgetFixtures.entry(),
                     interactive: false
                 )
                 .frame(height: 170) // ~systemMedium
@@ -45,12 +45,11 @@ struct CalendarPickerView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .listRowInsets(EdgeInsets())
                 .padding(.vertical, 4)
-                .id("grid-\(sync.status)") // rebuild after sync
 
                 HStack {
                     Spacer()
                     AgendaView(
-                        entry: AgendaEntryBuilder.live(),
+                        entry: WidgetFixtures.agendaEntry(),
                         interactive: false
                     )
                     .frame(width: 170, height: 146) // ~systemSmall
@@ -60,10 +59,9 @@ struct CalendarPickerView: View {
                 }
                 .listRowInsets(EdgeInsets())
                 .padding(.vertical, 4)
-                .id("agenda-\(sync.status)")
 
                 AgendaMediumView(
-                    entry: AgendaEntryBuilder.live(variant: .medium),
+                    entry: WidgetFixtures.agendaEntry(variant: .medium),
                     interactive: false
                 )
                 .frame(height: 170) // ~systemMedium
@@ -71,11 +69,10 @@ struct CalendarPickerView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .listRowInsets(EdgeInsets())
                 .padding(.vertical, 4)
-                .id("agenda-medium-\(sync.status)")
             } header: {
                 Text("Widget preview")
             } footer: {
-                Text("Live from your synced calendars; empty means no events in that range.")
+                Text("Sample events — your widgets show your own synced calendars.")
             }
         }
         .navigationTitle(auth.email ?? "Calendars")

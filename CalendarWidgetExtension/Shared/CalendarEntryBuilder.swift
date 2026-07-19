@@ -2,9 +2,8 @@ import Foundation
 import CalCore
 
 /// Builds a `CalendarTimelineEntry` from the shared App Group state (pagination offset +
-/// cached events). Used by both the widget's timeline provider and the app's in-app preview
-/// so they render identically. Falls back to sample fixtures when there's no cache yet
-/// (e.g. before the first sync), so previews are never blank.
+/// cached events). Drives the installed widget's timeline. Does no networking — reads only
+/// the cache.
 enum CalendarEntryBuilder {
     static func calendar() -> Calendar {
         var c = Calendar.current
@@ -24,8 +23,8 @@ enum CalendarEntryBuilder {
     /// Builds an entry from the shared cache, scoped to this widget instance's `calendarIds`
     /// (nil ⇒ show every calendar). When there's no cache, returns an *empty* entry (honest
     /// "no data" state) rather than sample fixtures — samples are reserved for the widget
-    /// placeholder / Xcode previews. `offsetOverride` lets the in-app preview page independently
-    /// of the shared offset the widget uses.
+    /// placeholder, the gallery snapshot, the in-app preview, and Xcode previews.
+    /// `offsetOverride` lets a caller page independently of the shared offset the widget uses.
     static func live(weekCount: Int, calendarIds: Set<String>? = nil, showDeclined: Bool = false, reference: Date = Date(), offsetOverride: Int? = nil) -> CalendarTimelineEntry {
         let cal = calendar()
         let store = AppGroupStore(suiteName: AppConfig.appGroupID)
@@ -34,8 +33,8 @@ enum CalendarEntryBuilder {
         let window = DateWindow(referenceDate: reference, pageOffset: offset, weekCount: weekCount, calendar: cal)
 
         let cache = EventCache(appGroupIdentifier: AppConfig.appGroupID)?.read()
-        // A non-nil, empty selection means the widget hasn't been configured yet (nil = show all,
-        // used by the in-app preview). Prompt to configure — but only once synced, so a
+        // A non-nil, empty selection means the widget hasn't been configured yet (nil = show
+        // all). Prompt to configure — but only once synced, so a
         // never-synced widget still shows the sign-in prompt.
         let needsConfiguration = calendarIds?.isEmpty == true && cache != nil
         let events: [CalendarEvent] = cache.map { c in

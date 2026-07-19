@@ -16,8 +16,10 @@ struct AgendaTimelineProvider: AppIntentTimelineProvider {
     }
 
     func snapshot(for configuration: SelectCalendarsIntent, in context: Context) async -> AgendaEntry {
-        AgendaEntryBuilder.live(calendarIds: configuration.selectedCalendarIds,
-                                showDeclined: configuration.showDeclinedEvents, variant: variant)
+        // Gallery preview: sample data, since the real cache may be empty or absent.
+        if context.isPreview { return WidgetFixtures.agendaEntry(variant: variant) }
+        return AgendaEntryBuilder.live(calendarIds: configuration.selectedCalendarIds,
+                                       showDeclined: configuration.showDeclinedEvents, variant: variant)
     }
 
     func timeline(for configuration: SelectCalendarsIntent, in context: Context) async -> Timeline<AgendaEntry> {

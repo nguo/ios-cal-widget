@@ -15,7 +15,9 @@ struct CalendarTimelineProvider: AppIntentTimelineProvider {
     }
 
     func snapshot(for configuration: SelectCalendarsIntent, in context: Context) async -> CalendarTimelineEntry {
-        CalendarEntryBuilder.live(weekCount: weekCount, calendarIds: configuration.selectedCalendarIds, showDeclined: configuration.showDeclinedEvents)
+        // Gallery preview: sample data, since the real cache may be empty or absent.
+        if context.isPreview { return WidgetFixtures.entry() }
+        return CalendarEntryBuilder.live(weekCount: weekCount, calendarIds: configuration.selectedCalendarIds, showDeclined: configuration.showDeclinedEvents)
     }
 
     func timeline(for configuration: SelectCalendarsIntent, in context: Context) async -> Timeline<CalendarTimelineEntry> {
