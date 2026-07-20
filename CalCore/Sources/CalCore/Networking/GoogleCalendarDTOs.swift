@@ -130,25 +130,21 @@ public extension CalendarEvent {
     }
 
     /// Parse an all-day "yyyy-MM-dd" into start-of-day in the given calendar's timezone.
+    /// Shared formatter — this runs once per all-day event on every sync.
     static func parseAllDay(_ string: String?, calendar: Calendar) -> Date? {
         guard let string else { return nil }
-        let f = DateFormatter()
-        f.calendar = calendar
-        f.timeZone = calendar.timeZone
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-dd"
+        let f = DateFormatterCache.shared.formatter(
+            format: "yyyy-MM-dd", calendar: calendar, locale: Locale(identifier: "en_US_POSIX")
+        )
         guard let d = f.date(from: string) else { return nil }
         return calendar.startOfDay(for: d)
     }
 
-    /// Parse an RFC3339 timestamp (with or without fractional seconds).
+    /// Parse an RFC3339 timestamp (with or without fractional seconds). Both parsers are
+    /// shared singletons — this runs once per timed event on every sync.
     static func parseDateTime(_ string: String?) -> Date? {
         guard let string else { return nil }
-        let withFraction = ISO8601DateFormatter()
-        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let d = withFraction.date(from: string) { return d }
-        let plain = ISO8601DateFormatter()
-        plain.formatOptions = [.withInternetDateTime]
-        return plain.date(from: string)
+        if let d = ISO8601Parsers.withFractionalSeconds.date(from: string) { return d }
+        return ISO8601Parsers.plain.date(from: string)
     }
 }

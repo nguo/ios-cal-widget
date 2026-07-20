@@ -143,6 +143,101 @@ final class BuildCacheFailureTests: XCTestCase {
                         now: Date(), tokenProvider: { _ in "token" })
         XCTAssertNil(cache)
     }
+
+    /// Unbounded parallelism drew Google's rate limiter, which then read as calendars with no
+    /// events. Cap the number of requests actually in flight at once.
+    func testFetchConcurrencyIsBounded() async {
+        let transport = ConcurrencyProbe()
+        let service = CalendarSyncService(
+            api: GoogleCalendarAPIClient(transport: transport), calendar: cal, maxConcurrentFetches: 3
+        )
+        _ = await service.buildCache(sources: sources(12), rangeStart: Date(), rangeEnd: Date(),
+                                     now: Date(), tokenProvider: { _ in "token" })
+        XCTAssertLessThanOrEqual(transport.peak, 3)
+        XCTAssertEqual(transport.total, 12, "every calendar is still fetched")
+    }
+
+    func testRateLimitDetection() {
+        XCTAssertTrue(CalendarSyncService.isRateLimited(HTTPError.status(429, body: "")))
+        XCTAssertTrue(CalendarSyncService.isRateLimited(
+            HTTPError.status(403, body: #"{"error":{"errors":[{"reason":"rateLimitExceeded"}]}}"#)))
+        XCTAssertTrue(CalendarSyncService.isRateLimited(
+            HTTPError.status(403, body: #"{"error":{"errors":[{"reason":"userRateLimitExceeded"}]}}"#)))
+        // A plain permission failure is not retryable — retrying just burns the time budget.
+        XCTAssertFalse(CalendarSyncService.isRateLimited(
+            HTTPError.status(403, body: #"{"error":{"errors":[{"reason":"forbidden"}]}}"#)))
+        XCTAssertFalse(CalendarSyncService.isRateLimited(HTTPError.status(500, body: "boom")))
+        XCTAssertFalse(CalendarSyncService.isRateLimited(HTTPError.nonHTTPResponse))
+    }
+
+    /// A throttled calendar should come back on retry rather than silently vanishing.
+    func testRateLimitedCalendarIsRetried() async {
+        let transport = FailThenSucceed(failures: 1, statusCode: 429, body: "slow down")
+        let cache = await service(transport).buildCache(
+            sources: sources(1), rangeStart: Date(), rangeEnd: Date(),
+            now: Date(), tokenProvider: { _ in "token" }
+        )
+        XCTAssertNotNil(cache)
+        XCTAssertEqual(transport.attempts, 2)
+    }
+
+    /// Non-throttling errors must NOT be retried.
+    func testServerErrorIsNotRetried() async {
+        let transport = FailThenSucceed(failures: 1, statusCode: 500, body: "boom")
+        _ = await service(transport).buildCache(
+            sources: sources(1), rangeStart: Date(), rangeEnd: Date(),
+            now: Date(), tokenProvider: { _ in "token" }
+        )
+        XCTAssertEqual(transport.attempts, 1)
+    }
+}
+
+/// Records how many requests are in flight simultaneously.
+private final class ConcurrencyProbe: HTTPTransport, @unchecked Sendable {
+    private let lock = NSLock()
+    private var current = 0
+    private(set) var peak = 0
+    private(set) var total = 0
+
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        lock.lock()
+        current += 1
+        total += 1
+        peak = max(peak, current)
+        lock.unlock()
+        defer { lock.lock(); current -= 1; lock.unlock() }
+
+        try? await Task.sleep(for: .milliseconds(20)) // hold the slot so overlap is observable
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        return (Data(#"{"items":[]}"#.utf8), response)
+    }
+}
+
+/// Fails the first `failures` requests with the given status, then succeeds.
+private final class FailThenSucceed: HTTPTransport, @unchecked Sendable {
+    private let lock = NSLock()
+    private let failures: Int
+    private let statusCode: Int
+    private let body: String
+    private(set) var attempts = 0
+
+    init(failures: Int, statusCode: Int, body: String) {
+        self.failures = failures
+        self.statusCode = statusCode
+        self.body = body
+    }
+
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        lock.lock()
+        attempts += 1
+        let shouldFail = attempts <= failures
+        lock.unlock()
+
+        let code = shouldFail ? statusCode : 200
+        let payload = shouldFail ? body : #"{"items":[]}"#
+        let response = HTTPURLResponse(url: request.url!, statusCode: code, httpVersion: nil, headerFields: nil)!
+        return (Data(payload.utf8), response)
+    }
 }
 
 /// Succeeds for every calendar except the named ones, which 500. Returns a single event whose

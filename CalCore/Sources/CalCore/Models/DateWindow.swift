@@ -60,10 +60,7 @@ public struct DateWindow: Equatable, Sendable {
     /// Uppercased month name of the window's first day (e.g. "MARCH"), matching the mockup.
     /// When the window spans two months we still label by the first day's month.
     public func monthLabel(calendar: Calendar, locale: Locale = .current) -> String {
-        let formatter = DateFormatter()
-        formatter.calendar = calendar
-        formatter.locale = locale
-        formatter.dateFormat = "MMMM"
+        let formatter = DateFormatterCache.shared.formatter(format: "MMMM", calendar: calendar, locale: locale)
         return formatter.string(from: startDate).uppercased(with: locale)
     }
 }

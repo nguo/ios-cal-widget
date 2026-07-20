@@ -181,12 +181,10 @@ struct AgendaMediumView: View {
         }
     }
 
+    /// Shared formatter — this runs once per row on every render.
     private func weekdayText(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.calendar = calendar
-        f.locale = .current
-        f.dateFormat = "E"
-        return f.string(from: date).uppercased()
+        DateFormatterCache.shared.formatter(format: "E", calendar: calendar)
+            .string(from: date).uppercased()
     }
 
     /// Wraps a card in a deep link to the event (falling back to its day). `systemMedium` follows

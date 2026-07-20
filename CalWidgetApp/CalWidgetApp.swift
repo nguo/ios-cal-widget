@@ -7,6 +7,12 @@ struct CalWidgetApp: App {
     @StateObject private var auth = GoogleAuthService()
     @Environment(\.scenePhase) private var scenePhase
 
+    /// The app hosts in-app widget previews, so it runs the same page-fit math. Resolve the
+    /// device metrics here, on main, for the same reason the widget bundle does.
+    init() {
+        WidgetStyle.primeDeviceMetrics()
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()

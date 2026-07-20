@@ -45,7 +45,7 @@ public struct GoogleCalendarAPIClient {
         var all: [GCalEvent] = []
         var pageToken: String?
         var latestSyncToken: String?
-        let iso = ISO8601DateFormatter()
+        let iso = ISO8601Parsers.query
 
         repeat {
             var items = [

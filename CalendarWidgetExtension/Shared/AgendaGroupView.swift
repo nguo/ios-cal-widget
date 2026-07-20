@@ -4,12 +4,9 @@ import CalCore
 /// Shared "E MMM d" day formatting (e.g. "Thu Jul 16"), used by both the header anchor and
 /// the day-group headers so they stay identical.
 enum AgendaDateFormat {
+    /// Shared formatter — this runs once per day-group on every render.
     static func header(_ date: Date, calendar: Calendar) -> String {
-        let f = DateFormatter()
-        f.calendar = calendar
-        f.locale = .current
-        f.dateFormat = "E MMM d"
-        return f.string(from: date)
+        DateFormatterCache.shared.formatter(format: "E MMM d", calendar: calendar).string(from: date)
     }
 }
 

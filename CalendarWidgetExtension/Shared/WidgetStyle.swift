@@ -78,10 +78,25 @@ enum WidgetStyle {
         return max(Int((budget + agendaMediumRowSpacing) / pitch), 1)
     }
 
-    /// systemSmall widget point-height for the current device, bucketed by screen long-side.
-    /// Values are approximate — verify on real hardware and adjust. Falls back to a mid value
-    /// off-device (e.g. previews).
-    static func smallWidgetHeight() -> CGFloat {
+    /// systemSmall widget point-height for the current device.
+    ///
+    /// Resolved from `UIScreen` exactly once, on whichever thread calls `primeDeviceMetrics()`
+    /// first — `UIScreen` is main-thread-only, and timeline providers run on a background
+    /// queue, so both entry points prime it at launch. A `static let` also means the screen is
+    /// read once per process rather than on every page-fit calculation.
+    static func smallWidgetHeight() -> CGFloat { deviceSmallWidgetHeight }
+
+    private static let deviceSmallWidgetHeight: CGFloat = resolveSmallWidgetHeight()
+
+    /// Forces the one `UIScreen` read to happen now, on the caller's thread. Call from the app
+    /// and widget-bundle initializers (both main) so a background provider never triggers it.
+    static func primeDeviceMetrics() {
+        _ = deviceSmallWidgetHeight
+    }
+
+    /// Bucketed by screen long-side. Values are approximate — verify on real hardware and
+    /// adjust. Falls back to a mid value off-device (e.g. previews).
+    private static func resolveSmallWidgetHeight() -> CGFloat {
         #if canImport(UIKit)
         let longSide = max(UIScreen.main.bounds.width, UIScreen.main.bounds.height)
         switch longSide {

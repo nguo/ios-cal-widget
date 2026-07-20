@@ -93,6 +93,15 @@ lockstep against mismatched boundaries.
 - **Filter cached events through `EventCacheData.visibleEvents(calendarIds:showDeclined:)`.**
   It is the single definition of "visible". The reload scheduler and the render path must agree,
   or the widget wakes for events it doesn't draw.
+- **Never construct a `DateFormatter` in a render or parse path** — init costs milliseconds and
+  these run per row and per event. Go through `DateFormatterCache.shared.formatter(...)` (keyed
+  by timezone, so it survives travel and DST) or `ISO8601Parsers`. Never mutate one you get back.
+- **`UIScreen` is read exactly once, at launch, from `primeDeviceMetrics()`.** It's
+  main-thread-only and timeline providers run on a background queue, so both the app and the
+  widget bundle prime it in their initializers. Don't add a second read site.
+- **Read the cache once per timeline build and pass it down** (`AgendaEntryBuilder.live(cache:)`).
+  The provider builds an entry per reload point; re-decoding the file for each is real memory
+  and CPU inside a jetsam-limited extension.
 - **Never key a `ForEach` on `CalendarEvent.id`.** It's Google's event id and repeats across
   calendars when you're invited on two connected accounts — duplicate SwiftUI ids render the
   first row twice, showing the wrong calendar color. Key by position.
