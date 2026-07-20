@@ -42,18 +42,17 @@ struct AgendaPageIntent: AppIntent {
     func perform() async throws -> some IntentResult {
         guard let store = AppGroupStore(suiteName: AppConfig.appGroupID) else { return .result() }
         let agenda = AgendaVariant(rawValue: variant) ?? .small
-        var cal = Calendar.current
-        cal.firstWeekday = 1
 
         let ids = calendarIds.isEmpty ? nil : Set(calendarIds)
         let ordered = EventCache(appGroupIdentifier: AppConfig.appGroupID)?.read()
-            .map { AgendaEntryBuilder.orderedEvents(reference: Date(), calendar: cal, cache: $0, calendarIds: ids, showDeclined: showDeclined) } ?? []
-        let bounds = AgendaEntryBuilder.boundaries(ordered, sizing: agenda.pageSizing)
+            .map { AgendaPagination.orderedEvents(reference: Date(), calendar: .calWidget, cache: $0, calendarIds: ids, showDeclined: showDeclined) } ?? []
+        let bounds = AgendaPagination.boundaries(ordered, sizing: agenda.pageSizing)
 
-        // Current page index (largest boundary ≤ the stored offset), then step one page.
-        let current = bounds.lastIndex(where: { $0 <= agenda.eventOffset(in: store) }) ?? 0
-        let next = min(max(current + direction, 0), bounds.count - 1)
-        agenda.setEventOffset(bounds[next], in: store)
+        // Same boundary walk the builder uses, so a tap always lands where the widget renders.
+        let stepped = AgendaPagination.steppedOffset(
+            from: agenda.eventOffset(in: store), direction: direction, bounds: bounds
+        )
+        agenda.setEventOffset(stepped, in: store)
         // This variant only: paging changes its offset, not the cache.
         WidgetReloader.reload(kind: agenda.widgetKind)
         return .result()

@@ -50,8 +50,7 @@ enum WidgetFixtures {
 
     /// A ready-to-render entry for SwiftUI/widget previews.
     static func entry(pageOffset: Int = 0, isSyncing: Bool = false, reference: Date = Date()) -> CalendarTimelineEntry {
-        var cal = Calendar.current
-        cal.firstWeekday = 1
+        let cal = Calendar.calWidget
         let data = cache(calendar: cal, reference: reference)
         let window = DateWindow(referenceDate: reference, pageOffset: pageOffset, weekCount: 2, calendar: cal)
         return CalendarTimelineEntry(
@@ -67,16 +66,15 @@ enum WidgetFixtures {
     /// A ready-to-render agenda entry for SwiftUI/widget previews. `eventOffset` selects the page;
     /// `variant` picks the page sizing so a medium preview breaks pages where the medium widget does.
     static func agendaEntry(eventOffset: Int = 0, variant: AgendaVariant = .small, reference: Date = Date()) -> AgendaEntry {
-        var cal = Calendar.current
-        cal.firstWeekday = 1
+        let cal = Calendar.calWidget
         let data = cache(calendar: cal, reference: reference)
-        let ordered = AgendaEntryBuilder.orderedEvents(reference: reference, calendar: cal, cache: data)
+        let ordered = AgendaPagination.orderedEvents(reference: reference, calendar: cal, cache: data)
         let sizing = variant.pageSizing
-        let bounds = AgendaEntryBuilder.boundaries(ordered, sizing: sizing)
-        let start = bounds.last(where: { $0 <= eventOffset }) ?? 0
+        let bounds = AgendaPagination.boundaries(ordered, sizing: sizing)
+        let start = AgendaPagination.pageStart(for: eventOffset, in: bounds)
         return AgendaEntry(
             date: reference,
-            groups: AgendaEntryBuilder.groups(from: ordered, offset: start, sizing: sizing),
+            groups: AgendaPagination.groups(from: ordered, offset: start, sizing: sizing),
             canPageBack: start > 0,
             canPageForward: start < (bounds.last ?? 0),
             lastSyncedAt: reference,

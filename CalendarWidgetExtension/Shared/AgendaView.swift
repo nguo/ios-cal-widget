@@ -12,11 +12,7 @@ struct AgendaView: View {
     /// False in a non-widget host (e.g. an in-app preview) where live intent buttons don't apply.
     var interactive: Bool = true
 
-    private var calendar: Calendar {
-        var c = Calendar.current
-        c.firstWeekday = 1
-        return c
-    }
+    private var calendar: Calendar { .calWidget }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {

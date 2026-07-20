@@ -14,11 +14,7 @@ struct AgendaMediumView: View {
     /// don't apply; rows render as plain, non-tappable content there.
     var interactive: Bool = true
 
-    private var calendar: Calendar {
-        var c = Calendar.current
-        c.firstWeekday = 1
-        return c
-    }
+    private var calendar: Calendar { .calWidget }
 
     /// One rendered row. `isGroupLead` drives the date column: only a group's first event carries
     /// the date, so the date lines up with the top of its first card and the rest sit blank.
@@ -222,23 +218,12 @@ struct AgendaMediumView: View {
         let detail = event.isAllDay ? "All Day" : EventTextFormatter.timeRange(for: event, calendar: calendar)
 
         return VStack(alignment: .leading, spacing: 1) {
-            clippedLine(event.title, size: 12.5, weight: .medium, color: titleColor, height: 15, strikethrough: declined)
-            clippedLine(detail, size: 11, weight: .regular, color: detailColor, height: 13, strikethrough: declined)
+            ClippedLine(string: event.title, size: 12.5, weight: .medium, color: titleColor, height: 15, strikethrough: declined)
+            ClippedLine(string: detail, size: 11, weight: .regular, color: detailColor, height: 13, strikethrough: declined)
         }
         .padding(.horizontal, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background(fill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 
-    /// Single line, truncated by hard clipping (no ellipsis). Uses `clippedGridRow`'s overlay trick
-    /// so the text's natural width can't widen the card.
-    private func clippedLine(_ string: String, size: CGFloat, weight: Font.Weight, color: Color, height: CGFloat, strikethrough: Bool = false) -> some View {
-        Text(string)
-            .font(.system(size: size, weight: weight))
-            .lineLimit(1)
-            .fixedSize()
-            .strikethrough(strikethrough)
-            .foregroundStyle(color)
-            .clippedGridRow(height: height)
-    }
 }

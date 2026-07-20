@@ -26,20 +26,29 @@ struct AgendaTimelineProvider: AppIntentTimelineProvider {
         let ids = configuration.selectedCalendarIds
         let showDeclined = configuration.showDeclinedEvents
         let now = Date()
-        let cal = Calendar.current
+        let cal = Calendar.calWidget
         // Data reloads are pushed by syncs/intents; this fallback reload lands at the next
         // midnight so "today" (and the day list anchored to it) advances at the day boundary.
         let tomorrow = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: now)) ?? now.addingTimeInterval(86_400)
+
+        // Read the cache ONCE and thread it through every entry below. Each `live` call used to
+        // re-open and re-decode the whole events.json, so a busy day cost a dozen-plus full
+        // decodes per reload inside a memory-capped extension.
+        let cache = EventCache(appGroupIdentifier: AppConfig.appGroupID)?.read()
 
         // One entry per moment the visible set changes: now, plus each event-end before midnight.
         // Each entry is built as-of its own instant, so WidgetKit swaps to it (dropping the ended
         // event) at that time with no networking and no refresh-budget cost.
         var references = [now]
-        if let cache = EventCache(appGroupIdentifier: AppConfig.appGroupID)?.read() {
-            references += AgendaEntryBuilder.upcomingEndTimes(after: now, before: tomorrow, cache: cache, calendarIds: ids, showDeclined: showDeclined)
+        if let cache {
+            references += AgendaPagination.upcomingEndTimes(
+                after: now, before: tomorrow, cache: cache,
+                calendarIds: ids, showDeclined: showDeclined
+            )
         }
         let entries = references.map {
-            AgendaEntryBuilder.live(calendarIds: ids, showDeclined: showDeclined, variant: variant, reference: $0)
+            AgendaEntryBuilder.live(calendarIds: ids, showDeclined: showDeclined,
+                                    variant: variant, reference: $0, cache: cache)
         }
 
         return Timeline(entries: entries, policy: .after(tomorrow))

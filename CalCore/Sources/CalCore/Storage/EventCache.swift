@@ -29,6 +29,21 @@ public struct EventCacheData: Codable, Equatable, Sendable {
         start >= windowStart && end <= windowEnd
     }
 
+    /// The events one widget instance should consider: restricted to its calendar selection
+    /// (nil ⇒ every calendar in the cache) and, unless `showDeclined`, with declined events
+    /// dropped.
+    ///
+    /// Single definition of "visible" on purpose. This pair of predicates used to be written
+    /// out separately in the grid builder, the agenda ordering, and the agenda's reload
+    /// scheduling — and the third one drifting from the other two would schedule widget reloads
+    /// for events the widget doesn't actually render.
+    public func visibleEvents(calendarIds: Set<String>?, showDeclined: Bool) -> [CalendarEvent] {
+        events.filter { event in
+            if let calendarIds, !calendarIds.contains(event.calendarId) { return false }
+            return showDeclined || !event.isDeclined
+        }
+    }
+
     /// PAGINATION path: widen the cache to include a freshly fetched range, merging in
     /// its events/sources without discarding what's already cached. De-dupes by id
     /// (incoming wins). Use when the user pages into a range not yet cached.

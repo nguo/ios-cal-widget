@@ -11,11 +11,7 @@ struct CalendarGridView: View {
     /// False in the in-app preview (its header glyphs are static — see MonthHeaderView).
     var interactive: Bool = true
 
-    private var calendar: Calendar {
-        var c = Calendar.current
-        c.firstWeekday = 1
-        return c
-    }
+    private var calendar: Calendar { .calWidget }
 
     private var weeks: [[Date]] {
         stride(from: 0, to: entry.window.days.count, by: 7).map {

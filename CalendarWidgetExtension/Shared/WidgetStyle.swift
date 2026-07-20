@@ -1,4 +1,5 @@
 import SwiftUI
+import CalCore
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -20,8 +21,8 @@ enum WidgetStyle {
     static let timedRowHeight: CGFloat = 11
 
     // Agenda widget row geometry. Shared between AgendaGroupView (rendering) and
-    // AgendaEntryBuilder (the fit calculation that decides how many events a page holds), so
-    // they MUST stay in sync — the builder assumes rows render at exactly these heights.
+    // AgendaPagination (the fit calculation that decides how many events a page holds), so
+    // they MUST stay in sync — the page walk assumes rows render at exactly these heights.
     static let agendaDayHeaderHeight: CGFloat = 18
     static let agendaAllDayRowHeight: CGFloat = 16
     static let agendaTimedRowHeight: CGFloat = 30
@@ -34,9 +35,21 @@ enum WidgetStyle {
     /// Height available for day-groups, derived from THIS device's systemSmall widget height so
     /// smaller phones page sooner (fewer events) than larger ones. WidgetKit gives the timeline
     /// provider no geometry, so the size is inferred from the screen. The fit math in
-    /// AgendaEntryBuilder targets this; AgendaView also hard-clips as a safety net.
+    /// `AgendaPagination` targets this; AgendaView also hard-clips as a safety net.
     static var agendaPageBudget: CGFloat {
         smallWidgetHeight() - agendaChrome
+    }
+
+    /// The row heights above, packaged for CalCore's page walk. This is the whole seam: the
+    /// widget owns the measurements, `AgendaPagination` owns the algorithm and stays
+    /// Foundation-only (and therefore testable off-device).
+    static var agendaMetrics: AgendaMetrics {
+        AgendaMetrics(
+            dayHeaderHeight: Double(agendaDayHeaderHeight),
+            allDayRowHeight: Double(agendaAllDayRowHeight),
+            timedRowHeight: Double(agendaTimedRowHeight),
+            pageBudget: Double(agendaPageBudget)
+        )
     }
 
     // Medium agenda widget geometry. Uniform two-line event cards in the right column, a fixed
@@ -101,5 +114,29 @@ extension View {
             .frame(height: height)
             .overlay(alignment: .leading) { self }
             .clipped()
+    }
+}
+
+/// One hard-clipped line of text (no ellipsis) at a fixed row height, built on
+/// `clippedGridRow` so the text's natural width can't widen its container.
+///
+/// Both agenda views had a byte-identical private copy of this; it belongs here next to the
+/// modifier it depends on.
+struct ClippedLine: View {
+    let string: String
+    let size: CGFloat
+    var weight: Font.Weight = .regular
+    let color: Color
+    let height: CGFloat
+    var strikethrough: Bool = false
+
+    var body: some View {
+        Text(string)
+            .font(.system(size: size, weight: weight))
+            .lineLimit(1)
+            .fixedSize()
+            .strikethrough(strikethrough)
+            .foregroundStyle(color)
+            .clippedGridRow(height: height)
     }
 }

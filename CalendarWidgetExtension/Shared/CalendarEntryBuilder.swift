@@ -5,17 +5,25 @@ import CalCore
 /// cached events). Drives the installed widget's timeline. Does no networking — reads only
 /// the cache.
 enum CalendarEntryBuilder {
-    static func calendar() -> Calendar {
-        var c = Calendar.current
-        c.firstWeekday = 1
-        return c
-    }
+    static func calendar() -> Calendar { .calWidget }
 
     /// Buckets events into the window's days (an event lands in every day it covers).
+    ///
+    /// Walks each event's own span once instead of re-filtering the whole event list per day.
+    /// `covers(day:calendar:)` runs several `startOfDay` calls, so the per-day scan cost
+    /// O(days x events) calendar operations every time the grid rebuilt.
     static func groupByDay(events: [CalendarEvent], window: DateWindow, calendar: Calendar) -> [Date: [CalendarEvent]] {
+        guard let first = window.days.first, let last = window.days.last else { return [:] }
         var result: [Date: [CalendarEvent]] = [:]
-        for day in window.days {
-            result[day] = events.filter { $0.covers(day: day, calendar: calendar) }
+        for day in window.days { result[day] = [] } // every day present, even when empty
+        for event in events {
+            var day = max(calendar.startOfDay(for: event.startDate), first)
+            let end = min(event.lastCoveredDay(in: calendar), last)
+            while day <= end {
+                result[day]?.append(event)
+                guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
+                day = next
+            }
         }
         return result
     }
@@ -37,11 +45,7 @@ enum CalendarEntryBuilder {
         // all). Prompt to configure — but only once synced, so a
         // never-synced widget still shows the sign-in prompt.
         let needsConfiguration = calendarIds?.isEmpty == true && cache != nil
-        let events: [CalendarEvent] = cache.map { c in
-            var e = calendarIds.map { ids in c.events.filter { ids.contains($0.calendarId) } } ?? c.events
-            if !showDeclined { e = e.filter { !$0.isDeclined } }
-            return e
-        } ?? []
+        let events = cache?.visibleEvents(calendarIds: calendarIds, showDeclined: showDeclined) ?? []
         return CalendarTimelineEntry(
             date: reference,
             window: window,

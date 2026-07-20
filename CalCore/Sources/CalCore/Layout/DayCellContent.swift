@@ -30,11 +30,23 @@ public struct DayCellContent: Equatable, Sendable {
     }
 
     /// All-day first, then timed ascending by start; titles break ties for determinism.
+    /// Delegates to the shared ordering — the agenda had a byte-identical private copy.
     static func sort(_ events: [CalendarEvent], calendar: Calendar) -> [CalendarEvent] {
-        let allDay = events.filter { $0.isAllDay }.sorted { $0.title < $1.title }
+        CalendarEvent.displayOrdered(events)
+    }
+}
+
+public extension CalendarEvent {
+    /// The canonical within-a-day display order: all-day events first (they render as bars),
+    /// then timed events ascending by start, with title breaking ties so the result is stable.
+    ///
+    /// Shared by the grid's day cells and the agenda's day groups. These were two separate
+    /// implementations of the same rule; a change to one silently made the two widgets disagree
+    /// about the order of the very same day.
+    static func displayOrdered(_ events: [CalendarEvent]) -> [CalendarEvent] {
+        let allDay = events.filter(\.isAllDay).sorted { $0.title < $1.title }
         let timed = events.filter { !$0.isAllDay }.sorted {
-            if $0.startDate != $1.startDate { return $0.startDate < $1.startDate }
-            return $0.title < $1.title
+            $0.startDate != $1.startDate ? $0.startDate < $1.startDate : $0.title < $1.title
         }
         return allDay + timed
     }

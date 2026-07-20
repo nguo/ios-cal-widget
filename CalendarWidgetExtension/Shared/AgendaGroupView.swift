@@ -135,9 +135,9 @@ struct AgendaGroupView: View {
                 .frame(width: 3)
                 .padding(.vertical, 2)
             VStack(alignment: .leading, spacing: 1) {
-                clippedLine(event.title, size: 12, weight: .medium,
+                ClippedLine(string: event.title, size: 12, weight: .medium,
                             color: declined ? WidgetStyle.declinedColor : .white, height: 16, strikethrough: declined)
-                clippedLine(EventTextFormatter.timeRange(for: event, calendar: calendar),
+                ClippedLine(string: EventTextFormatter.timeRange(for: event, calendar: calendar),
                             size: 10, weight: .regular,
                             color: declined ? WidgetStyle.declinedColor.opacity(0.7) : Color.white.opacity(0.6),
                             height: 12, strikethrough: declined)
@@ -166,16 +166,4 @@ struct AgendaGroupView: View {
             .frame(height: WidgetStyle.agendaAllDayRowHeight, alignment: .leading)
     }
 
-    /// Single line, truncated by hard clipping (no ellipsis). Uses `clippedGridRow`'s overlay
-    /// trick so the text's natural width can't widen the row (the `.fixedSize().frame(maxWidth:)`
-    /// approach propagates that width and stretches the whole widget — the bug this avoids).
-    private func clippedLine(_ string: String, size: CGFloat, weight: Font.Weight, color: Color, height: CGFloat, strikethrough: Bool = false) -> some View {
-        Text(string)
-            .font(.system(size: size, weight: weight))
-            .lineLimit(1)
-            .fixedSize()
-            .strikethrough(strikethrough)
-            .foregroundStyle(color)
-            .clippedGridRow(height: height)
-    }
 }

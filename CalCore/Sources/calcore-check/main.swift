@@ -331,6 +331,61 @@ do {
     eq(l6.timedByColumn[5]?.rows.count, 4, "uncovered column keeps full 4-row budget (no blank first line)")
 }
 
+// MARK: Agenda pagination — the page math the widget extension used to hide
+do {
+    let metrics = AgendaMetrics(dayHeaderHeight: 18, allDayRowHeight: 16, timedRowHeight: 30, pageBudget: 100)
+    let fit = AgendaPageSizing.heightFit(metrics)
+    func at(_ day: Int, _ hour: Int) -> Date { d(2026, 3, day, hour) }
+    func timed(_ id: String, _ day: Int, _ hour: Int) -> CalendarEvent {
+        ev(id, id, at(day, hour), at(day, hour + 1))
+    }
+    func cacheOf(_ events: [CalendarEvent]) -> EventCacheData {
+        EventCacheData(generatedAt: d(2026, 3, 1), windowStart: d(2026, 3, 1),
+                       windowEnd: d(2026, 3, 28), sources: [], events: events)
+    }
+    func ordered(_ events: [CalendarEvent], from: Date = d(2026, 3, 1)) -> [AgendaSlot] {
+        AgendaPagination.orderedEvents(reference: from, calendar: cal, cache: cacheOf(events))
+    }
+
+    let allDay = ev("banner", "Banner", d(2026, 3, 1), d(2026, 3, 2), allDay: true)
+    eq(ordered([timed("t", 1, 9), allDay]).map(\.event.id), ["banner", "t"],
+       "all-day sorts before timed within a day")
+
+    let ended = ordered([timed("over", 1, 9), timed("later", 1, 17)], from: at(1, 12))
+    eq(ended.map(\.event.id), ["later"], "already-ended timed events drop off")
+
+    // 18 (header) + 30 + 30 = 78 fits a 100pt budget; a third row would be 108.
+    eq(fit.eventsThatFit(ordered([timed("a", 1, 9), timed("b", 1, 11), timed("c", 1, 13)]), from: 0), 2,
+       "height-fit charges the day header once and stops at the budget")
+
+    let tiny = AgendaPageSizing.heightFit(
+        AgendaMetrics(dayHeaderHeight: 18, allDayRowHeight: 16, timedRowHeight: 30, pageBudget: 5))
+    eq(tiny.eventsThatFit(ordered([timed("a", 1, 9)]), from: 0), 1,
+       "a lone oversized event still fills a page (never a zero-length page)")
+
+    // Paging must be reversible and must reach every event.
+    let many = ordered((1 ... 10).map { timed("e\($0)", $0, 9) })
+    let bounds = AgendaPagination.boundaries(many, sizing: fit)
+    eq(bounds.first, 0, "boundaries start at 0")
+    check(bounds == bounds.sorted() && Set(bounds).count == bounds.count, "boundaries ascend, no repeats")
+    var reachable: [String] = []
+    for start in bounds {
+        reachable += AgendaPagination.groups(from: many, offset: start, sizing: fit).flatMap { $0.events.map(\.id) }
+    }
+    eq(reachable, many.map(\.event.id), "paging reaches every event exactly once")
+    let fwd = AgendaPagination.steppedOffset(from: 0, direction: 1, bounds: bounds)
+    eq(AgendaPagination.steppedOffset(from: fwd, direction: -1, bounds: bounds), 0, "forward then back returns home")
+    eq(AgendaPagination.steppedOffset(from: 0, direction: -1, bounds: bounds), 0, "paging back from page 1 clamps")
+    eq(AgendaPagination.pageStart(for: 5, in: [0, 3, 7]), 3, "a drifted offset snaps back to its boundary")
+
+    // Continuation flag: a page opening mid-day renders "(cont)".
+    let sameDay = ordered([timed("a", 1, 9), timed("b", 1, 11), timed("c", 1, 13)])
+    eq(AgendaPagination.groups(from: sameDay, offset: 1, sizing: .fixedCount(2)).first?.isContinuation, true,
+       "page opening mid-day is a continuation")
+    eq(AgendaPagination.groups(from: sameDay, offset: 0, sizing: .fixedCount(2)).first?.isContinuation, false,
+       "first page is never a continuation")
+}
+
 // MARK: Calendar-id URL encoding (holiday/contacts calendars carry a "#")
 do {
     let id = "en.usa#holiday@group.v.calendar.google.com"

@@ -6,11 +6,7 @@ import CalCore
 /// (a `today … +14d` canonical rebuild via the shared-Keychain refresh token) and reload
 /// every widget.
 enum AppRefresh {
-    private static var calendar: Calendar {
-        var c = Calendar.current
-        c.firstWeekday = 1
-        return c
-    }
+    private static var calendar: Calendar { .calWidget }
 
     /// Runs a canonical sync and reloads every widget. Used by the BGTask handler.
     static func runBackgroundRefresh() async {

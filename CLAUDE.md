@@ -10,7 +10,8 @@ same commit.
 
 | Path | Target | Contents |
 |---|---|---|
-| `CalCore/` | SPM package (both) | Models, networking, storage, formatting. Foundation-only, testable off-device. |
+| `CalCore/` | SPM package (both) | Models, networking, storage, formatting, layout math. Foundation-only, testable off-device. |
+| `CalCore/…/Layout/` | SPM package (both) | Layout *decisions* as pure data: `WeekLayout`, `DayCellContent`, `AgendaPagination`. UI measurements injected, never read. |
 | `CalWidgetApp/` | app | Sign-in, sync management, the calendar picker + in-app widget previews. |
 | `CalendarWidgetExtension/` | extension only | Widget declarations, timeline providers, `SelectCalendarsIntent`. |
 | `CalendarWidgetExtension/Shared/` | **app + extension** | Views, entries, builders, intents, style. |
@@ -18,6 +19,16 @@ same commit.
 `Shared/` compiling into *both* targets is the rule that's easy to get wrong: the app hosts
 in-app previews, so anything it renders must live there. Widget declarations and timeline
 providers stay at the extension root.
+
+**What belongs in CalCore is decided by dependencies, not by target.** The criterion is
+*Foundation-only, therefore testable off-device* — which is what makes `swift test` and
+`calcore-check` work with no simulator. It is emphatically **not** "shared between targets",
+since `Shared/` is shared too. So widget-only logic does belong in CalCore when it's pure:
+`WeekLayout`, `DayCellContent`, and `AgendaPagination` are all consumed solely by widget
+rendering, and living in CalCore is exactly why they have tests. Anything importing SwiftUI,
+WidgetKit, or UIKit stays in `Shared/`. The pattern for straddling that line is to inject the
+UI's numbers — `WeekLayout` takes `maxRowsPerCell`, `AgendaPagination` takes `AgendaMetrics`
+(supplied by `WidgetStyle` via `AgendaVariant`).
 
 ## Data flow
 
@@ -48,25 +59,40 @@ Registered in `CalendarWidgetBundle.swift`.
 **`AgendaWidget`** (systemSmall) and **`AgendaMediumWidget`** (systemMedium) share one pipeline:
 
 ```
-AgendaEntryBuilder.live(calendarIds:showDeclined:variant:)
-  → orderedEvents   flat forward [(day, event)] over AppConfig.agendaHorizonDays
-  → boundaries/groups   slice one page into [AgendaDayGroup]
+AgendaEntryBuilder.live(calendarIds:showDeclined:variant:cache:)   ← Shared/, WidgetKit
+  → AgendaPagination.orderedEvents    flat forward [AgendaSlot] over agendaHorizonDays
+  → AgendaPagination.boundaries / pageStart / groups → [AgendaDayGroup]   ← CalCore, tested
   → AgendaView (small) | AgendaMediumView (medium)
 ```
 
-`AgendaVariant` is the seam between them. It bundles the three things that differ and must
-travel together: WidgetKit `kind`, `AppGroupStore` offset key, and `AgendaPageSizing`
-(`.heightFit` for small — a greedy row-height walk; `.fixedCount` for medium — uniform cards).
-Raw-value backed because `AppIntent` parameters must be simple types; the paging intents carry
-it across the process hop as a string.
+All the page math is `AgendaPagination` in CalCore and covered by `AgendaPaginationTests`.
+`AgendaEntryBuilder` is only the part that can't move: reading `AppGroupStore`/`EventCache` and
+producing a `TimelineEntry`. Pass `cache:` when you already hold one — the timeline provider
+builds many entries per reload and re-decoding the file for each is pure waste.
+
+`AgendaVariant` is the seam between the two widgets. It bundles the three things that differ and
+must travel together: WidgetKit `kind`, `AppGroupStore` offset key, and `AgendaPageSizing`
+(`.heightFit(AgendaMetrics)` for small — a greedy row-height walk; `.fixedCount` for medium —
+uniform cards). It's also where `WidgetStyle`'s measurements cross into CalCore. Raw-value
+backed because `AppIntent` parameters must be simple types; the paging intents carry it across
+the process hop as a string.
 
 The two agendas use **separate offset keys on purpose** — one shared key would page them in
 lockstep against mismatched boundaries.
 
 ## Invariants
 
-- **`WidgetStyle` row heights and the page-fit math must stay in sync.** The builder assumes
-  rows render at exactly those heights; changing one alone silently mis-paginates.
+- **`WidgetStyle` row heights and the page-fit math must stay in sync.** The page walk assumes
+  rows render at exactly those heights; changing one alone silently mis-paginates. They meet at
+  `WidgetStyle.agendaMetrics` → `AgendaVariant.pageSizing` → `AgendaPagination` — edit the
+  heights and the rendering together.
+- **One Sunday-first calendar: `Calendar.calWidget`.** Never hand-roll
+  `Calendar.current` + `firstWeekday = 1` again; `DateWindow`'s week alignment depends on it, so
+  a single site drifting is an off-by-one-day bug. (`DateWindow` normalizes its injected
+  calendar internally — that one is deliberate.)
+- **Filter cached events through `EventCacheData.visibleEvents(calendarIds:showDeclined:)`.**
+  It is the single definition of "visible". The reload scheduler and the render path must agree,
+  or the widget wakes for events it doesn't draw.
 - **Never key a `ForEach` on `CalendarEvent.id`.** It's Google's event id and repeats across
   calendars when you're invited on two connected accounts — duplicate SwiftUI ids render the
   first row twice, showing the wrong calendar color. Key by position.
@@ -115,5 +141,7 @@ cd CalCore && swift test          # XCTest suite
 cd CalCore && swift run calcore-check   # assertion harness, no XCTest needed
 ```
 
-Agenda paging math lives in the extension target and has **no unit tests** — verify it by
-rendering, not by assuming.
+Agenda paging math is `AgendaPagination` in CalCore and is covered by `AgendaPaginationTests`
+plus `calcore-check`, so change it test-first. What those tests *cannot* see is whether
+`WidgetStyle`'s heights match what SwiftUI actually renders — that half still has to be
+verified by rendering on a real device (an SE is the tight case).

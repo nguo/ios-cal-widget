@@ -22,8 +22,7 @@ struct RefreshNowIntent: AppIntent {
             WidgetReloader.reloadAll() // the cache may have changed — every widget re-reads it
         }
 
-        var cal = Calendar.current
-        cal.firstWeekday = 1
+        let cal = Calendar.calWidget
         await SyncCoordinator.refetchAll(calendar: cal)
         return .result()
     }

@@ -14,11 +14,7 @@ final class AppSyncManager: ObservableObject {
     private weak var auth: GoogleAuthService?
     private let api = GoogleCalendarAPIClient()
 
-    private var calendar: Calendar {
-        var c = Calendar.current
-        c.firstWeekday = 1
-        return c
-    }
+    private var calendar: Calendar { .calWidget }
 
     func rebind(auth: GoogleAuthService) { self.auth = auth }
 

@@ -21,8 +21,7 @@ struct ShiftWindowIntent: AppIntent {
         let newOffset = store.twoWeekPageOffset + direction
         store.twoWeekPageOffset = newOffset
 
-        var cal = Calendar.current
-        cal.firstWeekday = 1
+        let cal = Calendar.calWidget
         let window = DateWindow(referenceDate: Date(), pageOffset: newOffset, weekCount: 2, calendar: cal)
         let alreadyCached = EventCache(appGroupIdentifier: AppConfig.appGroupID)?
             .read()?.covers(start: window.startDate, end: window.endExclusive) ?? false
