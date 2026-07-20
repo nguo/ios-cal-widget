@@ -13,7 +13,7 @@ public struct AppGroupStore {
         static let twoWeekPageOffset = "twoWeekPageOffset"
         static let agendaEventOffset = "agendaEventOffset"
         static let agendaMediumEventOffset = "agendaMediumEventOffset"
-        static let isSyncing = "isSyncing"
+        static let syncStartedAt = "syncStartedAt"
         static let lastSyncedAt = "lastSyncedAt"
         static let accountEmail = "accountEmail"
         static let pendingDeepLink = "pendingDeepLink"
@@ -38,8 +38,9 @@ public struct AppGroupStore {
     }
 
     /// Agenda pagination: index of the first visible event in the forward-ordered event list
-    /// (0 = first event on the today page, then steps of `AppConfig.agendaEventsPerPage`). Never
-    /// negative — the agenda doesn't page into the past.
+    /// (0 = the first event on the today page). Advances to the next page boundary, which is
+    /// content-dependent — see `AgendaPageSizing`. Never negative: the agenda doesn't page
+    /// into the past.
     public var agendaEventOffset: Int {
         get { defaults.integer(forKey: Key.agendaEventOffset) }
         nonmutating set { defaults.set(newValue, forKey: Key.agendaEventOffset) }
@@ -53,12 +54,32 @@ public struct AppGroupStore {
         nonmutating set { defaults.set(newValue, forKey: Key.agendaMediumEventOffset) }
     }
 
+    /// How long a sync may be in flight before its flag is assumed abandoned.
+    public static let syncFlagTimeout: TimeInterval = 90
+
+    /// When the in-flight sync started, or nil if none. Prefer `isSyncing` for reads;
+    /// use `beginSync()` / `endSync()` for writes.
+    public var syncStartedAt: Date? {
+        get { defaults.object(forKey: Key.syncStartedAt) as? Date }
+        nonmutating set { defaults.set(newValue, forKey: Key.syncStartedAt) }
+    }
+
     /// True while a sync is in flight. Read by `RefreshNowIntent` (to no-op on double-tap)
     /// and by the widget UI (to disable/dim the refresh button).
+    ///
+    /// Deliberately derived from a *timestamp* rather than stored as a Bool: App Intents run
+    /// under a short budget, and an extension killed mid-sync never got to clear a plain flag.
+    /// It then persisted in shared UserDefaults across launches, permanently dimming the
+    /// refresh button and making `RefreshNowIntent`'s own guard early-return forever, with no
+    /// way for the user to recover. A stale timestamp simply expires.
     public var isSyncing: Bool {
-        get { defaults.bool(forKey: Key.isSyncing) }
-        nonmutating set { defaults.set(newValue, forKey: Key.isSyncing) }
+        guard let started = syncStartedAt else { return false }
+        return Date().timeIntervalSince(started) < Self.syncFlagTimeout
     }
+
+    public func beginSync(now: Date = Date()) { syncStartedAt = now }
+
+    public func endSync() { syncStartedAt = nil }
 
     public var lastSyncedAt: Date? {
         get { defaults.object(forKey: Key.lastSyncedAt) as? Date }

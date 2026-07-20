@@ -52,4 +52,18 @@ public enum DeepLinkBuilder {
     public static func eventURL(htmlLink: String) -> URL? {
         URL(string: htmlLink)
     }
+
+    /// Whether a URL is safe to hand to `openURL` as a Google Calendar deep link.
+    ///
+    /// Requires https plus an exact host match or a *true* subdomain. A plain
+    /// `host.hasSuffix("google.com")` — what this replaced — also accepts `evilgoogle.com`
+    /// and `notgoogle.com`, because suffix matching ignores label boundaries.
+    /// Single gate for both deep-link paths: the app's `onOpenURL` router, and the forwarder
+    /// that drains whatever a widget intent stashed in the App Group.
+    public static func isTrustedGoogleHost(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "https", let host = url.host?.lowercased() else {
+            return false
+        }
+        return host == "google.com" || host.hasSuffix(".google.com")
+    }
 }

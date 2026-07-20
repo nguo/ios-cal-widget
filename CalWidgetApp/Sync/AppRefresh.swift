@@ -1,10 +1,10 @@
 import Foundation
 import BackgroundTasks
-import WidgetKit
 import CalCore
 
 /// Background + foreground refresh helpers for the app. Both delegate to `SyncCoordinator`
-/// (canonical −2/+6 rebuild via the shared-Keychain refresh token) and reload the widget.
+/// (a `today … +14d` canonical rebuild via the shared-Keychain refresh token) and reload
+/// every widget.
 enum AppRefresh {
     private static var calendar: Calendar {
         var c = Calendar.current
@@ -12,10 +12,10 @@ enum AppRefresh {
         return c
     }
 
-    /// Runs a canonical sync and reloads the widget. Used by the BGTask handler.
+    /// Runs a canonical sync and reloads every widget. Used by the BGTask handler.
     static func runBackgroundRefresh() async {
         await SyncCoordinator.refreshCanonical(calendar: calendar)
-        WidgetCenter.shared.reloadTimelines(ofKind: AppConfig.twoWeekWidgetKind)
+        WidgetReloader.reloadAll()
         schedule()
     }
 
@@ -27,7 +27,7 @@ enum AppRefresh {
             return
         }
         await SyncCoordinator.refreshCanonical(calendar: calendar)
-        WidgetCenter.shared.reloadTimelines(ofKind: AppConfig.twoWeekWidgetKind)
+        WidgetReloader.reloadAll()
     }
 
     /// Schedules the next background refresh (~1h out; the OS decides actual timing).

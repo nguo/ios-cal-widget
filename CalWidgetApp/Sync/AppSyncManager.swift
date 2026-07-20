@@ -1,6 +1,5 @@
 import Foundation
 import SwiftUI
-import WidgetKit
 import CalCore
 
 /// App-side orchestration of calendar listing, selection persistence, and syncing the cache
@@ -52,6 +51,22 @@ final class AppSyncManager: ObservableObject {
         }
     }
 
+    /// Flips both in-flight flags together — the only place either is written, so they can't
+    /// drift apart.
+    ///
+    /// They are genuinely two flags, not one duplicated. `isSyncing` is `@Published` because
+    /// SwiftUI needs a publisher to re-render the disabled button and spinner, and it tracks
+    /// this process exactly (`defer` guarantees the clear). The App Group flag is cross-process
+    /// mutual exclusion — it's what stops the widget's `RefreshNowIntent` starting a second sync
+    /// behind this one — and it self-expires after `syncFlagTimeout`, since a remote process can
+    /// die without ever clearing it. That expiry is deliberately *not* applied to the local flag:
+    /// a sync legitimately running past the timeout would otherwise drop the app's spinner while
+    /// the work was still going.
+    private func setSyncing(_ active: Bool, store: AppGroupStore?) {
+        isSyncing = active
+        if active { store?.beginSync() } else { store?.endSync() }
+    }
+
     /// Fetch across every calendar and write the cache. Covers the canonical today/+2wk
     /// window, the widget's currently-paged window, and any wider range pagination had already
     /// fetched — so an app-initiated sync never strands a paged widget on the stale banner.
@@ -61,25 +76,32 @@ final class AppSyncManager: ObservableObject {
             status = "App Group container unavailable — needs a signing team to run."
             return
         }
-        isSyncing = true
-        defer { isSyncing = false }
+        let store = AppGroupStore(suiteName: AppConfig.appGroupID)
+        setSyncing(true, store: store)
+        defer { setSyncing(false, store: store) }
         do {
             let token = try await auth.accessToken()
             let service = CalendarSyncService(api: api, calendar: calendar)
             let now = Date()
             let (start, end) = syncRange(now: now)
 
-            let cache = await service.buildCache(
+            // nil ⇒ every calendar failed. Skip the write so the last good cache survives;
+            // overwriting it with an empty result would blank the widgets while still looking
+            // freshly synced.
+            guard let cache = await service.buildCache(
                 sources: sources,
                 rangeStart: start,
                 rangeEnd: end,
                 now: now,
                 tokenProvider: { _ in token } // single account for now
-            )
+            ) else {
+                status = "Sync failed — couldn't reach any calendar. Showing last synced data."
+                return
+            }
             try EventCache(appGroupIdentifier: AppConfig.appGroupID)?.write(cache)
-            AppGroupStore(suiteName: AppConfig.appGroupID)?.lastSyncedAt = now
+            store?.lastSyncedAt = now
             status = "Synced \(cache.events.count) events across \(sources.count) calendars."
-            WidgetCenter.shared.reloadAllTimelines() // refresh both the grid and agenda widgets
+            WidgetReloader.reloadAll()
         } catch {
             status = "Sync failed: \(error.localizedDescription)"
         }

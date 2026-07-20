@@ -41,24 +41,6 @@ final class EventCacheTests: XCTestCase {
         XCTAssertNil(cache.read())
     }
 
-    func testEventsInRangeFilter() {
-        let inRange = TestSupport.event(id: "in", title: "In",
-            start: TestSupport.date(2026, 3, 10, 9, calendar: cal),
-            end: TestSupport.date(2026, 3, 10, 10, calendar: cal))
-        let before = TestSupport.event(id: "before", title: "Before",
-            start: TestSupport.date(2026, 2, 1, 9, calendar: cal),
-            end: TestSupport.date(2026, 2, 1, 10, calendar: cal))
-        let data = EventCacheData(
-            generatedAt: Date(),
-            windowStart: TestSupport.date(2026, 2, 1, 0, calendar: cal),
-            windowEnd: TestSupport.date(2026, 4, 1, 0, calendar: cal),
-            sources: [], events: [inRange, before]
-        )
-        let result = data.events(in: TestSupport.date(2026, 3, 1, 0, calendar: cal),
-                                 TestSupport.date(2026, 3, 31, 0, calendar: cal))
-        XCTAssertEqual(result.map(\.id), ["in"])
-    }
-
     func testCoversRange() {
         let data = EventCacheData(
             generatedAt: Date(),

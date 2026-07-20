@@ -18,9 +18,6 @@ public enum AppConfig {
     /// the canonical cache window so the agenda shows everything cached without its own fetch.
     public static let agendaHorizonDays = 14
 
-    /// Shared Keychain access group suffix (prefixed with the team's AppIdentifierPrefix at runtime).
-    public static let keychainAccessGroupSuffix = "com.ninbit.calwidget.tokens"
-
     /// Google OAuth iOS client ID. Read from the running process's Info.plist `GIDClientID`
     /// (injected from the gitignored `Local.xcconfig` at build time) — kept out of committed
     /// source. Both the app and the widget extension carry the key in their Info.plist, so

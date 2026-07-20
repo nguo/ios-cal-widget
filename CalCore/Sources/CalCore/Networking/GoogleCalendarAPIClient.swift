@@ -6,7 +6,7 @@ import Foundation
 /// syncs.
 public struct GoogleCalendarAPIClient {
     private let transport: HTTPTransport
-    private let base = URL(string: "https://www.googleapis.com/calendar/v3")!
+    static let base = URL(string: "https://www.googleapis.com/calendar/v3")!
 
     public init(transport: HTTPTransport = URLSession.shared) {
         self.transport = transport
@@ -19,7 +19,7 @@ public struct GoogleCalendarAPIClient {
         repeat {
             var items = [URLQueryItem(name: "minAccessRole", value: "reader")]
             if let pageToken { items.append(URLQueryItem(name: "pageToken", value: pageToken)) }
-            let url = makeURL(path: "/users/me/calendarList", query: items)
+            let url = try Self.makeURL(encodedPath: "/users/me/calendarList", query: items)
             let resp: GCalCalendarListResponse = try await get(url, accessToken: accessToken)
             entries.append(contentsOf: resp.items)
             pageToken = resp.nextPageToken
@@ -61,8 +61,7 @@ public struct GoogleCalendarAPIClient {
             }
             if let pageToken { items.append(URLQueryItem(name: "pageToken", value: pageToken)) }
 
-            let encodedId = calendarId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? calendarId
-            let url = makeURL(path: "/calendars/\(encodedId)/events", query: items)
+            let url = try Self.makeURL(encodedPath: Self.eventsPath(calendarId: calendarId), query: items)
             let resp: GCalEventsResponse = try await get(url, accessToken: accessToken)
             all.append(contentsOf: resp.items)
             pageToken = resp.nextPageToken
@@ -74,10 +73,43 @@ public struct GoogleCalendarAPIClient {
 
     // MARK: - Helpers
 
-    private func makeURL(path: String, query: [URLQueryItem]) -> URL {
-        var comps = URLComponents(url: base.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
+    /// RFC 3986 `pchar` minus "/" — the characters legal inside a single path segment.
+    /// Notably excludes "#" and "/", both of which occur in real calendar ids.
+    private static let pathSegmentAllowed: CharacterSet = {
+        var set = CharacterSet.alphanumerics
+        set.insert(charactersIn: "-._~!$&'()*+,;=:@")
+        return set
+    }()
+
+    /// Percent-encodes one path segment. Google calendar ids routinely contain "#"
+    /// (`en.usa#holiday@group.v.calendar.google.com`, `#contacts@group.v.calendar.google.com`).
+    ///
+    /// Public only so the off-device harness can assert it — same seam as
+    /// `TokenRefreshService.formURLEncode`.
+    public static func encodePathSegment(_ segment: String) -> String {
+        segment.addingPercentEncoding(withAllowedCharacters: pathSegmentAllowed) ?? segment
+    }
+
+    /// The events-list path for one calendar, with the id safely escaped. Split out so the
+    /// encoding can be asserted off-device (see `calcore-check`).
+    public static func eventsPath(calendarId: String) -> String {
+        "/calendars/\(encodePathSegment(calendarId))/events"
+    }
+
+    /// Appends an **already percent-encoded** path to the API base.
+    ///
+    /// Assigns `percentEncodedPath` rather than calling `appendingPathComponent`, which
+    /// re-encodes its argument: the "%" of an escaped segment became "%25", turning a
+    /// calendar id's "%23" into "%2523". Every holiday and contacts calendar 404'd, and
+    /// because a per-calendar fetch failure is swallowed, they simply rendered empty forever.
+    public static func makeURL(encodedPath: String, query: [URLQueryItem]) throws -> URL {
+        guard var comps = URLComponents(url: base, resolvingAgainstBaseURL: false) else {
+            throw HTTPError.invalidURL
+        }
+        comps.percentEncodedPath += encodedPath
         comps.queryItems = query
-        return comps.url!
+        guard let url = comps.url else { throw HTTPError.invalidURL }
+        return url
     }
 
     private func get<T: Decodable>(_ url: URL, accessToken: String) async throws -> T {

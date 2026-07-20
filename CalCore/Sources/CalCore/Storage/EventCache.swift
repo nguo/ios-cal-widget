@@ -24,14 +24,9 @@ public struct EventCacheData: Codable, Equatable, Sendable {
         self.events = events
     }
 
-    /// Events overlapping the given [start, end) range.
-    public func events(in start: Date, _ end: Date) -> [CalendarEvent] {
-        events.filter { $0.startDate < end && $0.endDate >= start }
-    }
-
     /// Whether the given [start, end) range is fully covered by the cached window.
     public func covers(start: Date, end: Date) -> Bool {
-start >= windowStart && end <= windowEnd
+        start >= windowStart && end <= windowEnd
     }
 
     /// PAGINATION path: widen the cache to include a freshly fetched range, merging in

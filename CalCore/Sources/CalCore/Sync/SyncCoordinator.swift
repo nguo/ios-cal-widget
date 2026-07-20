@@ -132,12 +132,17 @@ public enum SyncCoordinator {
         let access = try await TokenRefreshService(clientID: AppConfig.googleClientID)
             .accessToken(refreshToken: ctx.refreshToken)
         let sync = CalendarSyncService(api: GoogleCalendarAPIClient(), calendar: calendar)
-        return await sync.buildCache(
+        guard let cache = await sync.buildCache(
             sources: ctx.existing.sources,
             rangeStart: start,
             rangeEnd: end,
             now: now,
             tokenProvider: { _ in access.token }
-        )
+        ) else {
+            // Every calendar failed. Throwing here means the callers' `catch` paths skip the
+            // write entirely, leaving the last good cache in place.
+            throw SyncError.allCalendarsFailed
+        }
+        return cache
     }
 }

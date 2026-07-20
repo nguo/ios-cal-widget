@@ -11,4 +11,5 @@ extension URLSession: HTTPTransport {}
 public enum HTTPError: Error, Equatable {
     case status(Int, body: String)
     case nonHTTPResponse
+    case invalidURL
 }

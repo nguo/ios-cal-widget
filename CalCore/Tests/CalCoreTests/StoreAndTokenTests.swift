@@ -26,8 +26,24 @@ final class AppGroupStoreTests: XCTestCase {
     func testIsSyncingFlag() {
         let store = AppGroupStore(defaults: defaults)
         XCTAssertFalse(store.isSyncing)
-        store.isSyncing = true
+        store.beginSync()
         XCTAssertTrue(AppGroupStore(defaults: defaults).isSyncing)
+        store.endSync()
+        XCTAssertFalse(AppGroupStore(defaults: defaults).isSyncing)
+    }
+
+    /// A process killed mid-sync never clears the flag. It must expire on its own, or the
+    /// refresh button stays dimmed forever with no way for the user to recover.
+    func testStaleSyncFlagExpires() {
+        let store = AppGroupStore(defaults: defaults)
+        store.beginSync(now: Date().addingTimeInterval(-(AppGroupStore.syncFlagTimeout + 1)))
+        XCTAssertFalse(store.isSyncing)
+    }
+
+    func testRecentSyncFlagIsStillActive() {
+        let store = AppGroupStore(defaults: defaults)
+        store.beginSync(now: Date().addingTimeInterval(-(AppGroupStore.syncFlagTimeout / 2)))
+        XCTAssertTrue(store.isSyncing)
     }
 }
 

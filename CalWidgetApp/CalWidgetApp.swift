@@ -65,7 +65,7 @@ struct RootView: View {
             // stash-and-forward path as the agenda widget. Forwarding synchronously here is too
             // early (mid-activation) — Google Calendar drops the hand-off and just resumes its
             // previous view — so we defer to openPendingDeepLink, which runs once the app is active.
-            if url.host?.hasSuffix("google.com") == true {
+            if DeepLinkBuilder.isTrustedGoogleHost(url) {
                 AppGroupStore(suiteName: AppConfig.appGroupID)?.pendingDeepLink = url.absoluteString
                 Task { @MainActor in openPendingDeepLink() }
             } else {
@@ -81,7 +81,11 @@ struct RootView: View {
         guard let store = AppGroupStore(suiteName: AppConfig.appGroupID),
               let link = store.pendingDeepLink,
               let url = URL(string: link) else { return }
+        // Clear before validating, so a link we refuse to open can't wedge the queue.
         store.pendingDeepLink = nil
+        // Re-check here rather than trusting the writer: this drains shared cross-process
+        // storage, and the value is opened directly with `openURL`.
+        guard DeepLinkBuilder.isTrustedGoogleHost(url) else { return }
         // Only a cold launch (fresh process, not yet backgrounded) is slow enough to foreground that
         // forwarding mid-transition races Google Calendar — it drops the deep link's date and lands
         // on today — so defer just that case. A resume from background is fast, so forward at once.

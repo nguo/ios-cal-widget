@@ -1,5 +1,5 @@
 import AppIntents
-import WidgetKit
+import Foundation
 import CalCore
 
 /// Pagination intent: shifts the shared page offset by one window (±1), reloads immediately
@@ -28,13 +28,14 @@ struct ShiftWindowIntent: AppIntent {
             .read()?.covers(start: window.startDate, end: window.endExclusive) ?? false
 
         // Show the loading spinner only when we actually need to fetch this range.
-        if !alreadyCached { store.isSyncing = true }
-        WidgetCenter.shared.reloadTimelines(ofKind: AppConfig.twoWeekWidgetKind) // instant window change (+ spinner)
+        if !alreadyCached { store.beginSync() }
+        // Page offset + spinner are grid-only state, so this one is a grid-only reload.
+        WidgetReloader.reload(kind: AppConfig.twoWeekWidgetKind) // instant window change (+ spinner)
 
         if !alreadyCached {
             await SyncCoordinator.fetchWindowIfNeeded(pageOffset: newOffset, weekCount: 2, calendar: cal)
-            store.isSyncing = false
-            WidgetCenter.shared.reloadTimelines(ofKind: AppConfig.twoWeekWidgetKind) // events pop in
+            store.endSync()
+            WidgetReloader.reloadAll() // the fetch widened the cache — every widget re-reads it
         }
         return .result()
     }

@@ -18,28 +18,36 @@ public struct CalendarSyncService {
 
     /// Builds the canonical cache for the given range across *every* source passed in — the
     /// cache is a superset of all available calendars, and each widget instance filters it to
-    /// its own selection at render. Fetches calendars concurrently. A per-calendar failure is
-    /// skipped (its events are omitted) rather than failing the whole sync — partial data beats
-    /// no data, and the atomic write means the previous cache survives if the caller aborts.
+    /// its own selection at render. Fetches calendars concurrently.
+    ///
+    /// A *partial* failure is tolerated: that calendar's events are omitted and the rest still
+    /// populate, since partial data beats no data. A *total* failure is not — returns nil when
+    /// every calendar failed, so the caller skips the write and the previous cache survives.
+    /// Writing the empty result instead produced a cache that looked freshly synced but had no
+    /// events, silently blanking the widget after a transient network drop.
     public func buildCache(
         sources: [CalendarSource],
         rangeStart: Date,
         rangeEnd: Date,
         now: Date,
         tokenProvider: @escaping AccessTokenProvider
-    ) async -> EventCacheData {
-        let perCalendar: [[CalendarEvent]] = await withTaskGroup(of: [CalendarEvent].self) { group in
+    ) async -> EventCacheData? {
+        let perCalendar: [[CalendarEvent]?] = await withTaskGroup(of: [CalendarEvent]?.self) { group in
             for source in sources {
                 group.addTask {
                     await self.fetchEvents(for: source, rangeStart: rangeStart, rangeEnd: rangeEnd, tokenProvider: tokenProvider)
                 }
             }
-            var collected: [[CalendarEvent]] = []
+            var collected: [[CalendarEvent]?] = []
             for await events in group { collected.append(events) }
             return collected
         }
 
-        let merged = perCalendar.flatMap { $0 }.sorted { $0.startDate < $1.startDate }
+        let succeeded = perCalendar.compactMap { $0 }
+        // Nothing came back at all — treat as a failed sync, not an empty calendar.
+        guard !sources.isEmpty, !succeeded.isEmpty else { return nil }
+
+        let merged = succeeded.flatMap { $0 }.sorted { $0.startDate < $1.startDate }
         return EventCacheData(
             generatedAt: now,
             windowStart: rangeStart,
@@ -49,12 +57,14 @@ public struct CalendarSyncService {
         )
     }
 
+    /// One calendar's events, or nil if the fetch failed (distinct from a genuinely empty
+    /// calendar, which returns an empty array — `buildCache` needs to tell those apart).
     private func fetchEvents(
         for source: CalendarSource,
         rangeStart: Date,
         rangeEnd: Date,
         tokenProvider: @escaping AccessTokenProvider
-    ) async -> [CalendarEvent] {
+    ) async -> [CalendarEvent]? {
         do {
             let token = try await tokenProvider(source.accountEmail)
             let page = try await api.events(
@@ -67,7 +77,13 @@ public struct CalendarSyncService {
                 try? CalendarEvent.from(gcal, calendarId: source.id, colorHex: source.colorHex, calendar: calendar)
             }
         } catch {
-            return [] // skip this calendar on failure; other calendars still populate
+            return nil
         }
     }
+}
+
+/// Failures that abort a whole sync (as opposed to one calendar).
+public enum SyncError: Error, Equatable {
+    /// Every calendar's fetch failed — almost always no network or a revoked token.
+    case allCalendarsFailed
 }

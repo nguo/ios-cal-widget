@@ -76,7 +76,29 @@ lockstep against mismatched boundaries.
   cold-launch delay in `openPendingDeepLink` is a deliberate race workaround; leave it.
 - **Use `View.clippedGridRow(height:)` for dense text rows.** A bare `.fixedSize()` propagates
   the text's natural width and stretches the whole widget.
+- **Anything that writes the cache must `WidgetReloader.reloadAll()`.** All three widgets read
+  the same cache, so a per-kind reload silently strands the others on stale data — which is
+  exactly what happened when background/foreground/manual refresh each named only the grid.
+  `WidgetReloader.reload(kind:)` is only for state that provably affects one widget (a paging
+  offset, its own spinner).
+- **A total sync failure must not be written.** `CalendarSyncService.buildCache` returns nil
+  when *every* calendar fails; callers skip the write so the last good cache survives. Writing
+  the empty result blanked the widget while leaving it looking freshly synced. A partial
+  failure still writes — some data beats none.
+- **Never percent-encode a path and then call `appendingPathComponent`.** It re-encodes the
+  "%", so a calendar id's "%23" became "%2523" and every holiday/contacts calendar 404'd.
+  Build URLs via `GoogleCalendarAPIClient.makeURL(encodedPath:query:)`.
+- **The sync flag is a timestamp, not a Bool.** `AppGroupStore.isSyncing` derives from
+  `syncStartedAt` and expires after `syncFlagTimeout`. An App Intent killed mid-sync never
+  clears a plain flag, which then persists across launches and permanently dims the refresh
+  button. Use `beginSync()` / `endSync()`.
+- **Deep links are gated by `DeepLinkBuilder.isTrustedGoogleHost`.** `hasSuffix("google.com")`
+  also matches `evilgoogle.com`. Both the `onOpenURL` router and the pending-link forwarder
+  validate; the forwarder clears the stashed link *before* validating so a rejected one can't
+  wedge the queue.
 - Cross-account duplicate events currently render twice by design; deduping was deferred.
+- Sync is **full-refetch only**. `nextSyncToken` is surfaced by the API client but not yet
+  stored, so every refresh refetches the whole window — a known, deliberate gap.
 
 ## Build
 

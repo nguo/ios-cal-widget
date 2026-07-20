@@ -1,5 +1,5 @@
 import AppIntents
-import WidgetKit
+import Foundation
 import CalCore
 
 /// Agenda pagination: moves the visible window by one page via the deterministic page
@@ -54,7 +54,8 @@ struct AgendaPageIntent: AppIntent {
         let current = bounds.lastIndex(where: { $0 <= agenda.eventOffset(in: store) }) ?? 0
         let next = min(max(current + direction, 0), bounds.count - 1)
         agenda.setEventOffset(bounds[next], in: store)
-        WidgetCenter.shared.reloadTimelines(ofKind: agenda.widgetKind)
+        // This variant only: paging changes its offset, not the cache.
+        WidgetReloader.reload(kind: agenda.widgetKind)
         return .result()
     }
 }
@@ -77,7 +78,7 @@ struct AgendaGoToStartIntent: AppIntent {
         if let store = AppGroupStore(suiteName: AppConfig.appGroupID) {
             agenda.setEventOffset(0, in: store)
         }
-        WidgetCenter.shared.reloadTimelines(ofKind: agenda.widgetKind)
+        WidgetReloader.reload(kind: agenda.widgetKind)
         return .result()
     }
 }

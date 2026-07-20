@@ -1,5 +1,4 @@
 import AppIntents
-import WidgetKit
 import CalCore
 
 /// Resets pagination to the window containing today.
@@ -9,7 +8,8 @@ struct GoToTodayIntent: AppIntent {
 
     func perform() async throws -> some IntentResult {
         AppGroupStore(suiteName: AppConfig.appGroupID)?.twoWeekPageOffset = 0
-        WidgetCenter.shared.reloadTimelines(ofKind: AppConfig.twoWeekWidgetKind)
+        // Grid-only: changes a page offset, not the cache.
+        WidgetReloader.reload(kind: AppConfig.twoWeekWidgetKind)
         return .result()
     }
 }

@@ -3,7 +3,7 @@ import SwiftUI
 import CalCore
 
 /// The two-week widget. This is the ONLY week-count-specific declaration: it fixes
-/// `weekCount: 2` and the `.systemLarge` family, then delegates rendering to the generic
+/// `weekCount: 2` and the `.systemMedium` family, then delegates rendering to the generic
 /// `CalendarGridView`. A future OneWeekWidget/ThreeWeekWidget would mirror this file.
 struct TwoWeekWidget: Widget {
     var body: some WidgetConfiguration {
@@ -22,7 +22,7 @@ struct TwoWeekWidget: Widget {
     }
 }
 
-#Preview(as: .systemLarge) {
+#Preview(as: .systemMedium) {
     TwoWeekWidget()
 } timeline: {
     WidgetFixtures.entry()

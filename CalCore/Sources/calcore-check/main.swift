@@ -240,17 +240,35 @@ func runSyncCheck() async {
         CalendarSource(id: "calB", accountEmail: "a@example.com", summary: "Fun", colorHex: "#D50000"),
         CalendarSource(id: "calC", accountEmail: "a@example.com", summary: "Empty", colorHex: "#000000")
     ]
-    let result = await service.buildCache(
+    guard let result = await service.buildCache(
         sources: sources,
         rangeStart: d(2026, 3, 1),
         rangeEnd: d(2026, 3, 31),
         now: d(2026, 3, 10),
         tokenProvider: { _ in "fake-access-token" }
-    )
+    ) else {
+        check(false, "buildCache returned nil despite reachable calendars")
+        return
+    }
     eq(result.events.count, 2, "sync merged events from the calendars that had events")
     eq(result.sources.count, 3, "every passed calendar retained as an available source")
     eq(result.events.first { $0.id == "e1" }?.colorHex, "#0B8043", "event color denormalized from its source")
     eq(result.events.first { $0.id == "e2" }?.isAllDay, true, "all-day preserved through sync")
+
+    // A total failure must NOT yield an empty-but-valid cache: the caller would write it and
+    // stamp it as freshly synced, silently blanking the widget after a transient network drop.
+    final class DeadTransport: HTTPTransport, @unchecked Sendable {
+        func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+            let resp = HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!
+            return (Data("boom".utf8), resp)
+        }
+    }
+    let dead = CalendarSyncService(api: GoogleCalendarAPIClient(transport: DeadTransport()), calendar: cal)
+    let failed = await dead.buildCache(
+        sources: sources, rangeStart: d(2026, 3, 1), rangeEnd: d(2026, 3, 31),
+        now: d(2026, 3, 10), tokenProvider: { _ in "fake-access-token" }
+    )
+    check(failed == nil, "every-calendar-failed sync returns nil instead of an empty cache")
 }
 let syncSem = DispatchSemaphore(value: 0)
 Task { await runSyncCheck(); syncSem.signal() }
@@ -311,6 +329,34 @@ do {
     let farTimed = (1...4).map { ev("f\($0)", "F\($0)", d(2026, 3, 6, 8 + $0), d(2026, 3, 6, 9 + $0)) }
     let l6 = WeekLayout(days: week, eventsByDay: byDay([trip] + farTimed), calendar: cal, maxRowsPerCell: 4)
     eq(l6.timedByColumn[5]?.rows.count, 4, "uncovered column keeps full 4-row budget (no blank first line)")
+}
+
+// MARK: Calendar-id URL encoding (holiday/contacts calendars carry a "#")
+do {
+    let id = "en.usa#holiday@group.v.calendar.google.com"
+    eq(GoogleCalendarAPIClient.eventsPath(calendarId: id),
+       "/calendars/en.usa%23holiday@group.v.calendar.google.com/events",
+       "calendar-id '#' escaped once in the path")
+    let url = try! GoogleCalendarAPIClient.makeURL(
+        encodedPath: GoogleCalendarAPIClient.eventsPath(calendarId: id),
+        query: [URLQueryItem(name: "singleEvents", value: "true")]
+    )
+    check(!url.absoluteString.contains("%2523"), "calendar id is not double-encoded")
+    eq(url.absoluteString,
+       "https://www.googleapis.com/calendar/v3/calendars/en.usa%23holiday@group.v.calendar.google.com/events?singleEvents=true",
+       "full events URL for a '#'-bearing calendar id")
+    eq(GoogleCalendarAPIClient.eventsPath(calendarId: "a/b"), "/calendars/a%2Fb/events",
+       "'/' in a calendar id can't split the path")
+}
+
+// MARK: Deep-link host trust
+do {
+    func trusted(_ s: String) -> Bool { DeepLinkBuilder.isTrustedGoogleHost(URL(string: s)!) }
+    check(trusted("https://calendar.google.com/calendar/u/0/r/day/2026/7/19"), "subdomain accepted")
+    check(trusted("https://google.com/calendar"), "apex domain accepted")
+    check(!trusted("https://evilgoogle.com/calendar"), "lookalike host rejected")
+    check(!trusted("https://google.com.attacker.net"), "suffixed host rejected")
+    check(!trusted("http://calendar.google.com"), "non-https rejected")
 }
 
 print("")

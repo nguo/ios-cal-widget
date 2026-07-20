@@ -8,6 +8,16 @@ import Security
 /// The access group must match the `keychain-access-groups` entitlement on both targets.
 /// Actual Keychain I/O requires that entitlement, so this is verified on device, not in the
 /// off-device smoke check.
+///
+/// **Every call site passes `accessGroup: nil`, and that is load-bearing.** A nil group makes
+/// the Keychain use the *first* entry of the calling target's `keychain-access-groups`
+/// entitlement. Both targets list exactly one group —
+/// `$(AppIdentifierPrefix)com.ninbit.calwidget.tokens` — so nil resolves to the shared group in
+/// both processes, which is what lets the widget read the token the app wrote. Adding a second
+/// group *above* it in either .entitlements file would silently break token sharing: app and
+/// extension would begin using different keychains and the widget's refresh would simply stop
+/// finding credentials. Keep the shared group first, or start passing it explicitly (which
+/// requires resolving AppIdentifierPrefix at runtime).
 public struct KeychainStore {
     private let service = "com.ninbit.calwidget.refreshToken"
     private let accessGroup: String?
