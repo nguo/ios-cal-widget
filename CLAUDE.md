@@ -123,6 +123,14 @@ lockstep against mismatched boundaries.
 - **`.widgetAccentable()` covers a view *and its subtree*.** Only put it on things with no text
   inside them (timed capsules, the Sunday column, the today strip). Marking a plate that has a
   label inside drags the label into the same recolored group and hides it.
+- **The midnight timeline reload is render-only — `CoverageRefresh` is what makes it sync.**
+  `.after(tomorrow)` advances "today" from the cache; it doesn't refetch, so the cached window
+  falls a day short of the horizon per day that passes, and at a week rollover the grid's window
+  moves to a new Sunday the cache can't cover. Both providers call
+  `CoverageRefresh.syncIfUncovered` before building, which is the **only** networking in the
+  render path — it is gated on `covers()` being false, so a covered reload still costs nothing.
+  The `isSyncing` claim inside it matters: all three widgets wake on the same midnight tick and
+  would otherwise each fetch the same range.
 - **No spinners in a widget — say it in words.** A widget is a static snapshot; WidgetKit never
   animates it, so a `ProgressView` renders as an inert ring (and tinting flattened the one we
   had into a pale blob). In-progress state goes in `CalendarGridView`'s `banner`, which shows
@@ -153,6 +161,30 @@ lockstep against mismatched boundaries.
   when *every* calendar fails; callers skip the write so the last good cache survives. Writing
   the empty result blanked the widget while leaving it looking freshly synced. A partial
   failure still writes — some data beats none.
+- **Every sync replaces the cache with exactly one canonical range — `refreshCanonical`.** That
+  is the whole reason no pruning exists: nothing accumulates, so nothing needs trimming.
+  Pagination (`fetchWindowIfNeeded`) is the one writer that *merges*, and the next sync reclaims
+  whatever it added — so back-paging stays cached within a session but never permanently. Don't
+  reintroduce a union-with-existing-window refresh; that was `refetchAll`, and it grew the
+  refetched range without bound for anyone who refreshed from the widget instead of the app.
+- **That one range must satisfy both widgets, which want different windows.** The grid is
+  week-aligned (most-recent Sunday … +2wk); the agenda is today … +`agendaHorizonDays`.
+  `canonicalRange(coveringOffset:)` spans the union — it starts at the *Sunday* (not today) and
+  ends at whichever reaches further. The agenda's far edge lands exactly on `windowEnd` with zero
+  slack, which is why `canonicalRange` **derives** its end from `AppConfig.agendaHorizonDays`
+  instead of hardcoding a matching 14. Don't put the constant back: nothing tells the agenda its
+  cache fell short — it just renders fewer days — and `CoverageRefresh` would see `covers()` false
+  on every build and fire a sync that can't ever fix it.
+- **A refresh while paged fetches the *visible* window, not just the canonical one.** Every sync
+  passes `coveringOffset: twoWeekPageOffset`, so refreshing a widget paged to +5 fetches
+  today … that window's end contiguously. This is what makes the refresh button work on a paged
+  view, and it's why deleting `refetchAll` lost nothing — only *other* windows, previously paged
+  to but not on screen, are dropped.
+- **Multi-day spans survive the replace.** A trip that began last week meets a cache starting
+  today. Google's `timeMin` bounds an event's *end* (and `timeMax` its start), so the fetch
+  returns overlapping spans; `AgendaPagination.orderedEvents` and `CalendarEntryBuilder.groupByDay`
+  then clip to the window with `max(startOfDay(event.start), first)` rather than dropping events
+  that start out of range. Both halves are pinned by tests — keep the clipping if you touch them.
 - **Never percent-encode a path and then call `appendingPathComponent`.** It re-encodes the
   "%", so a calendar id's "%23" became "%2523" and every holiday/contacts calendar 404'd.
   Build URLs via `GoogleCalendarAPIClient.makeURL(encodedPath:query:)`.

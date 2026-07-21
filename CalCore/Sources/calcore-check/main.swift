@@ -182,7 +182,8 @@ do {
     let now = d(2026, 3, 16, 12)
     let range = SyncCoordinator.canonicalRange(calendar: cal, now: now)
     eq(cal.dateComponents([.day], from: range.start, to: cal.startOfDay(for: now)).day!, 0, "canonical start is today")
-    eq(cal.dateComponents([.day], from: cal.startOfDay(for: now), to: range.end).day!, 14, "canonical end is 14 days after today")
+    eq(cal.dateComponents([.day], from: cal.startOfDay(for: now), to: range.end).day!,
+       AppConfig.agendaHorizonDays, "canonical end is agendaHorizonDays after today")
 }
 
 // MARK: canonicalRange widened to cover the (week-aligned) widget window
@@ -204,6 +205,67 @@ do {
 
     checkCovers(0, "offset 0")   // week-aligned start (Sunday) is before today
     checkCovers(-1, "offset −1") // previous window
+}
+
+// MARK: One canonical range must satisfy BOTH widgets
+do {
+    // The grid and the agenda want different windows: the grid is week-aligned (most-recent
+    // Sunday … +14d), the agenda is today … +agendaHorizonDays. Every sync writes exactly one
+    // range now, so that range has to cover both or one widget renders short.
+    for hour in [0, 12, 23] {
+        for dayOfMonth in 15 ... 21 { // a full week of "today"s, Sunday through Saturday
+            let now = d(2026, 3, dayOfMonth, hour)
+            let range = SyncCoordinator.canonicalRange(coveringOffset: 0, weekCount: 2, calendar: cal, now: now)
+            let cache = EventCacheData(generatedAt: now, windowStart: range.start, windowEnd: range.end,
+                                       sources: [], events: [])
+
+            let grid = DateWindow(referenceDate: now, pageOffset: 0, weekCount: 2, calendar: cal)
+            check(cache.covers(start: grid.startDate, end: grid.endExclusive),
+                  "canonical range covers the week-aligned grid window (Mar \(dayOfMonth), \(hour)h)")
+
+            let todayStart = cal.startOfDay(for: now)
+            let horizonEnd = cal.date(byAdding: .day, value: AppConfig.agendaHorizonDays, to: todayStart)!
+            check(cache.covers(start: todayStart, end: horizonEnd),
+                  "canonical range covers the agenda horizon (Mar \(dayOfMonth), \(hour)h)")
+        }
+    }
+}
+
+// MARK: Refreshing while paged forward refetches the visible window
+do {
+    // The refresh button syncs at the *current* offset, so a widget paged past the canonical
+    // window still gets fresh events for the page on screen.
+    let now = d(2026, 3, 18, 12)
+    for offset in [1, 2, 5] {
+        let range = SyncCoordinator.canonicalRange(coveringOffset: offset, weekCount: 2, calendar: cal, now: now)
+        let cache = EventCacheData(generatedAt: now, windowStart: range.start, windowEnd: range.end,
+                                   sources: [], events: [])
+        let window = DateWindow(referenceDate: now, pageOffset: offset, weekCount: 2, calendar: cal)
+        check(cache.covers(start: window.startDate, end: window.endExclusive),
+              "refresh at offset +\(offset) covers the visible window")
+    }
+}
+
+// MARK: Canonical end is derived from the agenda horizon, not a matching constant
+do {
+    let now = d(2026, 3, 18, 12)
+    let range = SyncCoordinator.canonicalRange(calendar: cal, now: now)
+    eq(cal.dateComponents([.day], from: cal.startOfDay(for: now), to: range.end).day!,
+       AppConfig.agendaHorizonDays, "canonical end tracks agendaHorizonDays")
+}
+
+// MARK: Multi-day spans survive a canonical (replace-only) sync
+do {
+    // Sync replaces the cache with exactly today … +14d, so a trip that began before today meets
+    // a window that starts today. Google returns it (timeMin bounds an event's *end*), and the
+    // ordering must clip it to the horizon instead of dropping it for starting out of range.
+    let today = d(2026, 3, 5)
+    let trip = ev("trip", "Trip", d(2026, 3, 1), d(2026, 3, 8), allDay: true) // Mar 1–7 inclusive
+    let cache = EventCacheData(generatedAt: today, windowStart: today, windowEnd: d(2026, 3, 19),
+                               sources: [], events: [trip])
+    let days = AgendaPagination.orderedEvents(reference: today, calendar: cal, cache: cache)
+        .map { cal.component(.day, from: $0.day) }
+    eq(days, [5, 6, 7], "span starting before the window shows from today through its last day")
 }
 
 // MARK: Token form-encoding

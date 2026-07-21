@@ -5,12 +5,19 @@ import Foundation
 /// the selected calendars from the existing cache — no GoogleSignIn SDK needed, so it runs in
 /// the widget extension too. All writes are atomic (`EventCache.write`).
 public enum SyncCoordinator {
-    /// The rolling canonical window: today .. 2 weeks after. Kept intentionally small — paging
-    /// backfills anything beyond it on demand (see `fetchRangeIfNeeded`).
+    /// The rolling canonical window: today .. `agendaHorizonDays` after. Kept intentionally small —
+    /// paging backfills anything beyond it on demand (see `fetchRangeIfNeeded`).
+    ///
+    /// The end is *derived* from the agenda's horizon rather than hardcoded to match it. The agenda
+    /// asks for exactly `today … today + agendaHorizonDays` and nothing tells it when the cache
+    /// falls short — it just renders fewer days. Worse, `CoverageRefresh` would then see `covers()`
+    /// false on every timeline build and fetch on each one, since no sync could ever satisfy a
+    /// horizon the canonical range doesn't reach. Deriving it means raising the horizon widens the
+    /// fetch automatically.
     public static func canonicalRange(calendar: Calendar, now: Date) -> (start: Date, end: Date) {
         let today = calendar.startOfDay(for: now)
         let start = today
-        let end = calendar.date(byAdding: .day, value: 14, to: today)!
+        let end = calendar.date(byAdding: .day, value: AppConfig.agendaHorizonDays, to: today)!
         return (start, end)
     }
 
@@ -38,6 +45,11 @@ public enum SyncCoordinator {
     /// widget's currently-paged window so a paged widget isn't stranded on the stale banner.
     /// Returns false if not signed in / no selected calendars — leaving any existing cache
     /// untouched.
+    ///
+    /// Replacing rather than merging is what keeps the cache bounded: every sync entry point
+    /// lands here, so the file is always exactly one canonical range and nothing accumulates.
+    /// Pagination is the one writer that merges (`fetchWindowIfNeeded`), and the next sync
+    /// reclaims whatever it added.
     @discardableResult
     public static func refreshCanonical(weekCount: Int = 2, calendar: Calendar, now: Date = Date()) async -> Bool {
         guard let ctx = context() else { return false }
@@ -45,32 +57,6 @@ public enum SyncCoordinator {
         do {
             let cache = try await fetch(ctx: ctx, calendar: calendar, start: range.start, end: range.end, now: now)
             try EventCache(appGroupIdentifier: AppConfig.appGroupID)?.write(cache)
-            ctx.store.lastSyncedAt = now
-            return true
-        } catch {
-            return false
-        }
-    }
-    
-    /// Refetch the whole currently-fetched date range, widened to at least the canonical window
-    /// covering the widget's current offset. The widening is what lets the "tap refresh" button
-    /// clear the stale banner: without it a refetch reuses `existing`'s window verbatim, so a cache
-    /// whose window had drifted narrower than the (week-aligned) widget window could never re-cover
-    /// it — refresh would refetch the same too-narrow range and the banner would persist.
-    @discardableResult
-    public static func refetchAll(
-        weekCount: Int = 2,
-        calendar: Calendar,
-        now: Date = Date()
-    ) async -> Bool {
-        guard let ctx = context() else { return false }
-
-        let covering = canonicalRange(coveringOffset: ctx.store.twoWeekPageOffset, weekCount: weekCount, calendar: calendar, now: now)
-        let start = min(ctx.existing.windowStart, covering.start)
-        let end = max(ctx.existing.windowEnd, covering.end)
-        do {
-            let fetched = try await fetch(ctx: ctx, calendar: calendar, start: start, end: end, now: now)
-            try EventCache(appGroupIdentifier: AppConfig.appGroupID)?.write(fetched)
             ctx.store.lastSyncedAt = now
             return true
         } catch {

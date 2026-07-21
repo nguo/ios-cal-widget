@@ -83,6 +83,80 @@ final class TrustedHostTests: XCTestCase {
     }
 }
 
+/// Every sync path now writes exactly one canonical range, so that single range has to satisfy
+/// two different consumers: the grid's week-aligned window (most-recent Sunday … +14d) and the
+/// agenda's today … +`agendaHorizonDays`. Nothing widens it after the fact anymore.
+final class CanonicalRangeCoverageTests: XCTestCase {
+    private let cal = TestSupport.calendar()
+
+    private func canonicalCache(now: Date, offset: Int = 0) -> EventCacheData {
+        let range = SyncCoordinator.canonicalRange(coveringOffset: offset, weekCount: 2, calendar: cal, now: now)
+        return EventCacheData(generatedAt: now, windowStart: range.start, windowEnd: range.end,
+                              sources: [], events: [])
+    }
+
+    /// Every day of the week as "today", since the gap between the grid's Sunday anchor and
+    /// today is exactly what varies.
+    func testCoversTheGridWindowOnEveryWeekday() {
+        for dayOfMonth in 15 ... 21 {
+            let now = TestSupport.date(2026, 3, dayOfMonth, 12, calendar: cal)
+            let grid = DateWindow(referenceDate: now, pageOffset: 0, weekCount: 2, calendar: cal)
+            XCTAssertTrue(canonicalCache(now: now).covers(start: grid.startDate, end: grid.endExclusive),
+                          "grid window uncovered on Mar \(dayOfMonth)")
+        }
+    }
+
+    /// The canonical end is derived from the horizon, so these land exactly equal by construction
+    /// rather than by two constants agreeing.
+    func testCoversTheAgendaHorizonOnEveryWeekday() {
+        for dayOfMonth in 15 ... 21 {
+            let now = TestSupport.date(2026, 3, dayOfMonth, 12, calendar: cal)
+            let todayStart = cal.startOfDay(for: now)
+            let horizonEnd = cal.date(byAdding: .day, value: AppConfig.agendaHorizonDays, to: todayStart)!
+            XCTAssertTrue(canonicalCache(now: now).covers(start: todayStart, end: horizonEnd),
+                          "agenda horizon uncovered on Mar \(dayOfMonth)")
+        }
+    }
+
+    /// The agenda's horizon and the canonical range's far edge must move together. They used to be
+    /// two independent `14`s: raising the horizon alone left the agenda asking for a day nothing
+    /// ever fetched — rendering short with no banner, and (once `CoverageRefresh` existed) leaving
+    /// `covers()` false forever, so every timeline build fired a sync that couldn't fix it.
+    func testCanonicalEndTracksTheAgendaHorizon() {
+        let now = TestSupport.date(2026, 3, 18, 12, calendar: cal)
+        let range = SyncCoordinator.canonicalRange(calendar: cal, now: now)
+        let span = cal.dateComponents([.day], from: cal.startOfDay(for: now), to: range.end).day!
+        XCTAssertEqual(span, AppConfig.agendaHorizonDays,
+                       "canonical end must be derived from the horizon, not a constant matching it")
+    }
+
+    /// Refreshing while paged forward past the canonical window has to fetch the window the user is
+    /// actually looking at — that's what `coveringOffset` widens for. Without it a refresh from a
+    /// paged widget would fetch today…+14 and leave the visible page untouched.
+    func testRefreshWhilePagedForwardCoversTheVisibleWindow() {
+        let now = TestSupport.date(2026, 3, 18, 12, calendar: cal)
+        for offset in [1, 2, 5] {
+            let window = DateWindow(referenceDate: now, pageOffset: offset, weekCount: 2, calendar: cal)
+            XCTAssertTrue(canonicalCache(now: now, offset: offset)
+                .covers(start: window.startDate, end: window.endExclusive),
+                          "refresh at offset +\(offset) must cover the visible window")
+        }
+    }
+
+    /// A paged-back grid still gets its window fetched, and the agenda is unaffected by paging.
+    func testPagedBackOffsetCoversBothWindows() {
+        let now = TestSupport.date(2026, 3, 18, 12, calendar: cal)
+        let cache = canonicalCache(now: now, offset: -1)
+        let grid = DateWindow(referenceDate: now, pageOffset: -1, weekCount: 2, calendar: cal)
+        XCTAssertTrue(cache.covers(start: grid.startDate, end: grid.endExclusive))
+
+        let todayStart = cal.startOfDay(for: now)
+        let horizonEnd = cal.date(byAdding: .day, value: AppConfig.agendaHorizonDays, to: todayStart)!
+        XCTAssertTrue(cache.covers(start: todayStart, end: horizonEnd),
+                      "paging the grid must not starve the agenda")
+    }
+}
+
 final class BuildCacheFailureTests: XCTestCase {
     private let cal = TestSupport.calendar()
 

@@ -3,7 +3,7 @@ import Foundation
 import CalCore
 
 /// Manual refresh intent. Guards against concurrent/double-tap syncs via the shared sync flag,
-/// reflects the in-flight state in the widget (dimmed button), then refetches the cached range
+/// reflects the in-flight state in the widget (dimmed button), then rebuilds the canonical range
 /// via `SyncCoordinator` (which reads the refresh token from the shared Keychain — no
 /// GoogleSignIn SDK in the extension).
 struct RefreshNowIntent: AppIntent {
@@ -23,7 +23,7 @@ struct RefreshNowIntent: AppIntent {
         }
 
         let cal = Calendar.calWidget
-        await SyncCoordinator.refetchAll(calendar: cal)
+        await SyncCoordinator.refreshCanonical(calendar: cal)
         return .result()
     }
 }

@@ -38,6 +38,18 @@ final class AgendaPaginationTests: XCTestCase {
 
     // MARK: - Ordering
 
+    /// A span that began before the cache window's start still has to show on the days it covers
+    /// from today forward. Sync writes exactly one canonical range and replaces it wholesale, so
+    /// this is the case where a trip started last week meets a cache that starts today: Google's
+    /// timeMin bounds an event's *end*, so the span comes back in the fetch, and the ordering has
+    /// to clip it to the horizon rather than drop it for starting out of range.
+    func testMultiDaySpanStartingBeforeTheReferenceStillAppears() {
+        let trip = allDay("trip", from: 1, toExclusive: 8) // Mar 1–7 inclusive
+        let ordered = slots([trip], from: day(5))
+        XCTAssertEqual(ordered.map { cal.component(.day, from: $0.day) }, [5, 6, 7],
+                       "clipped to today forward, through its last covered day")
+    }
+
     func testAllDayEventsSortBeforeTimedWithinADay() {
         let ordered = slots([timed("t", 1, 9), allDay("a", from: 1, toExclusive: 2)])
         XCTAssertEqual(ordered.map(\.event.id), ["a", "t"])

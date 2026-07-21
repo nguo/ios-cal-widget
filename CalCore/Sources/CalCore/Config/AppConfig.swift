@@ -14,8 +14,10 @@ public enum AppConfig {
     /// WidgetKit `kind` for the medium (three-column) agenda widget.
     public static let agendaMediumWidgetKind = "AgendaMediumWidget"
 
-    /// Agenda widget: how many days forward the agenda covers, starting at today. Aligned with
-    /// the canonical cache window so the agenda shows everything cached without its own fetch.
+    /// Agenda widget: how many days forward the agenda covers, starting at today. This is the
+    /// source of the canonical cache window's far edge — `SyncCoordinator.canonicalRange` reads it
+    /// — so raising it widens the fetch to match instead of leaving the agenda asking for days
+    /// nothing ever fetched.
     public static let agendaHorizonDays = 14
 
     /// Google OAuth iOS client ID. Read from the running process's Info.plist `GIDClientID`
