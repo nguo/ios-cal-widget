@@ -99,6 +99,26 @@ lockstep against mismatched boundaries.
 - **`UIScreen` is read exactly once, at launch, from `primeDeviceMetrics()`.** It's
   main-thread-only and timeline providers run on a background queue, so both the app and the
   widget bundle prime it in their initializers. Don't add a second read site.
+- **Never call `Color(hex:)` directly in a view.** Go through the `WidgetStyle.eventBar` /
+  `allDayFill` / `cardFill` / `cardTitle` / `cardDetail` / `eventTitle` / `eventDetail` helpers,
+  which take a `WidgetRenderingMode`. A tinted Home Screen (`.accented`) or StandBy (`.vibrant`)
+  flattens hue, so raw event colors collapse to one indistinguishable shade. Per-calendar
+  identity is genuinely unrecoverable in those modes — the goal is legibility, not fidelity.
+- **Never draw a label on top of an opaque fill. Use `.eventPlate(_:fill:mode:)`.** An opaque
+  plate and the text on it flatten to the *same* flat color when recolored, so every all-day bar,
+  medium-agenda card, and the "today" button rendered as a blank white slab. `eventPlate`
+  switches the plate to a thin outline when recolored, leaving the label on the plain background
+  — the arrangement timed rows already use.
+
+  What's actually been verified, since the distinction matters if you revisit this: the *opaque*
+  fills hid their labels (observed on the pre-tinting code), and the outline version renders
+  correctly (observed on device). Whether a translucent plate would also have worked was never
+  tested — the ~0.15-alpha chevron circles stayed legible throughout, which suggests it might
+  have. The outline is kept because it doesn't depend on tuning alpha against a system behavior
+  we can't easily predict, not because translucency was ruled out.
+- **`.widgetAccentable()` covers a view *and its subtree*.** Only put it on things with no text
+  inside them (timed capsules, the Sunday column, the today strip). Marking a plate that has a
+  label inside drags the label into the same recolored group and hides it.
 - **Read the cache once per timeline build and pass it down** (`AgendaEntryBuilder.live(cache:)`).
   The provider builds an entry per reload point; re-decoding the file for each is real memory
   and CPU inside a jetsam-limited extension.

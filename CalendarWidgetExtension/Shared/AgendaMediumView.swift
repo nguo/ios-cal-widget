@@ -13,6 +13,7 @@ struct AgendaMediumView: View {
     /// False in a non-widget host (e.g. the in-app preview) where live intent buttons and links
     /// don't apply; rows render as plain, non-tappable content there.
     var interactive: Bool = true
+    @Environment(\.widgetRenderingMode) private var renderingMode
 
     private var calendar: Calendar { .calWidget }
 
@@ -143,7 +144,8 @@ struct AgendaMediumView: View {
         content
             .foregroundStyle(foreground)
             .frame(width: WidgetStyle.agendaMediumRailButtonSize, height: WidgetStyle.agendaMediumRailButtonSize)
-            .background(background, in: Circle())
+            // Outlined once tinted — a filled circle hid the "today" day-number inside it.
+            .eventPlate(Circle(), fill: background, mode: renderingMode)
     }
 
     // MARK: - Rows
@@ -208,20 +210,23 @@ struct AgendaMediumView: View {
     /// the only thing distinguishing an all-day event here (both kinds get the same card).
     private func card(_ event: CalendarEvent) -> some View {
         let declined = event.isDeclined
-        // Declined cards drop to a dim fill and flip to light text; dark-on-bright would be
-        // illegible once the fill is darkened.
-        let fill = Color(hex: event.colorHex, brightness: declined ? 0.28 : 1.0)
-        let titleColor = declined ? Color.white.opacity(0.75) : Color(hex: event.colorHex, brightness: 0.22)
-        let detailColor = declined ? Color.white.opacity(0.5) : Color(hex: event.colorHex, brightness: 0.42)
         let detail = event.isAllDay ? "All Day" : EventTextFormatter.timeRange(for: event, calendar: calendar)
 
         return VStack(alignment: .leading, spacing: 1) {
-            ClippedLine(string: event.title, size: 12.5, weight: .medium, color: titleColor, height: 15, strikethrough: declined)
-            ClippedLine(string: detail, size: 11, weight: .regular, color: detailColor, height: 13, strikethrough: declined)
+            ClippedLine(string: event.title, size: 12.5, weight: .medium,
+                        color: WidgetStyle.cardTitle(event, mode: renderingMode),
+                        height: 15, strikethrough: declined)
+            ClippedLine(string: detail, size: 11, weight: .regular,
+                        color: WidgetStyle.cardDetail(event, mode: renderingMode),
+                        height: 13, strikethrough: declined)
         }
         .padding(.horizontal, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(fill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        // Outlined rather than filled once tinted: a filled card renders in the same flat color
+        // as the text on it, which is what left these cards as blank white slabs.
+        .eventPlate(RoundedRectangle(cornerRadius: 7, style: .continuous),
+                    fill: WidgetStyle.cardFill(event, mode: renderingMode),
+                    mode: renderingMode)
     }
 
 }

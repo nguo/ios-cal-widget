@@ -1,4 +1,5 @@
 import SwiftUI
+import WidgetKit
 import CalCore
 
 /// Shared "E MMM d" day formatting (e.g. "Thu Jul 16"), used by both the header anchor and
@@ -16,6 +17,7 @@ enum AgendaDateFormat {
 struct AgendaGroupView: View {
     let group: AgendaDayGroup
     let calendar: Calendar
+    @Environment(\.widgetRenderingMode) private var renderingMode
     /// Today, for the "in N days" relative suffix and the today pill.
     let referenceDate: Date
     /// False in a non-widget host (e.g. an in-app preview) where the intent buttons don't apply;
@@ -98,7 +100,9 @@ struct AgendaGroupView: View {
                 .foregroundStyle(Color.white.opacity(0.9))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 2)
-                .background(WidgetStyle.todayPillBackground, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .eventPlate(RoundedRectangle(cornerRadius: 7, style: .continuous),
+                            fill: WidgetStyle.todayPillBackground,
+                            mode: renderingMode)
         } else {
             HStack(spacing: 5) {
                 Text(headerText)
@@ -128,15 +132,17 @@ struct AgendaGroupView: View {
         let declined = event.isDeclined
         return HStack(spacing: 5) {
             RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                .fill(declined ? WidgetStyle.declinedColor : Color(hex: event.colorHex))
+                .fill(WidgetStyle.eventBar(event, mode: renderingMode))
                 .frame(width: 3)
                 .padding(.vertical, 2)
+                .widgetAccentable()
             VStack(alignment: .leading, spacing: 1) {
                 ClippedLine(string: event.title, size: 12, weight: .medium,
-                            color: declined ? WidgetStyle.declinedColor : .white, height: 16, strikethrough: declined)
+                            color: WidgetStyle.eventTitle(event, mode: renderingMode),
+                            height: 16, strikethrough: declined)
                 ClippedLine(string: EventTextFormatter.timeRange(for: event, calendar: calendar),
                             size: 10, weight: .regular,
-                            color: declined ? WidgetStyle.declinedColor.opacity(0.7) : Color.white.opacity(0.6),
+                            color: WidgetStyle.eventDetail(event, mode: renderingMode),
                             height: 12, strikethrough: declined)
             }
         }
@@ -147,16 +153,21 @@ struct AgendaGroupView: View {
     /// dim the bar and render the title in red with a strikethrough.
     private func allDayRow(_ event: CalendarEvent) -> some View {
         let declined = event.isDeclined
-        return Color(hex: event.colorHex, brightness: declined ? 0.28 : 0.55)
+        // Plate behind, title in front — a filled bar would hide its own title once tinted.
+        return Color.clear
             .frame(maxWidth: .infinity)
             .frame(height: WidgetStyle.agendaAllDayRowHeight - 2)
+            .eventPlate(RoundedRectangle(cornerRadius: 3, style: .continuous),
+                        fill: WidgetStyle.allDayFill(event, mode: renderingMode),
+                        mode: renderingMode,
+                        outline: WidgetStyle.eventTitle(event, mode: renderingMode))
             .overlay(alignment: .leading) {
                 Text(event.title)
                     .font(.system(size: 12, weight: .medium))
                     .lineLimit(1)
                     .fixedSize()          // full title; overlay width can't widen the bar
                     .strikethrough(declined)
-                    .foregroundStyle(declined ? WidgetStyle.declinedColor : .white)
+                    .foregroundStyle(WidgetStyle.eventTitle(event, mode: renderingMode))
                     .padding(.leading, 4)
             }
             .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))

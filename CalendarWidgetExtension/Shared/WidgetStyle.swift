@@ -1,4 +1,5 @@
 import SwiftUI
+import WidgetKit
 import CalCore
 #if canImport(UIKit)
 import UIKit
@@ -114,7 +115,96 @@ enum WidgetStyle {
     }
 }
 
+// MARK: - Rendering-mode aware colors
+
+/// Every event color in these widgets carries meaning: hue *is* which calendar an event
+/// belongs to. iOS flattens hue whenever it recolors a widget — a tinted Home Screen
+/// (`.accented`) or StandBy (`.vibrant`) — which would collapse every calendar to one
+/// indistinguishable color and leave darkened fills as unreadable mud.
+///
+/// So when the system is recoloring, we stop encoding anything in hue and switch to **alpha**,
+/// which iOS preserves. Per-calendar identity is genuinely lost in that mode — nothing can
+/// recover it — but the structure that remains (all-day bar vs. timed capsule, title vs. time,
+/// declined vs. attending) stays readable, and the result composes with the user's tint instead
+/// of fighting it.
+///
+/// All of it funnels through these helpers so no view decides colors on its own.
+extension WidgetStyle {
+
+    /// True when iOS is recoloring the widget and hue no longer survives.
+    static func isRecolored(_ mode: WidgetRenderingMode) -> Bool { mode != .fullColor }
+
+    /// The saturated bar or capsule marking a timed event's calendar.
+    static func eventBar(_ event: CalendarEvent, mode: WidgetRenderingMode) -> Color {
+        if isRecolored(mode) { return .white.opacity(event.isDeclined ? 0.35 : 0.85) }
+        return event.isDeclined ? declinedColor : Color(hex: event.colorHex)
+    }
+
+    /// The darkened plate behind an all-day event's title.
+    static func allDayFill(_ event: CalendarEvent, mode: WidgetRenderingMode) -> Color {
+        if isRecolored(mode) { return .white.opacity(event.isDeclined ? 0.10 : 0.22) }
+        return Color(hex: event.colorHex, brightness: event.isDeclined ? 0.28 : 0.55)
+    }
+
+    /// The filled card behind a medium-agenda event.
+    static func cardFill(_ event: CalendarEvent, mode: WidgetRenderingMode) -> Color {
+        if isRecolored(mode) { return .white.opacity(event.isDeclined ? 0.10 : 0.20) }
+        return Color(hex: event.colorHex, brightness: event.isDeclined ? 0.28 : 1.0)
+    }
+
+    /// Title text on a medium-agenda card. In full color this is a dark tint of the event's own
+    /// color, readable on the bright card; once recolored the card is dim, so the text flips light.
+    static func cardTitle(_ event: CalendarEvent, mode: WidgetRenderingMode) -> Color {
+        if isRecolored(mode) { return .white.opacity(event.isDeclined ? 0.7 : 0.95) }
+        return event.isDeclined ? .white.opacity(0.75) : Color(hex: event.colorHex, brightness: 0.22)
+    }
+
+    /// Secondary (time range / "All Day") text on a medium-agenda card.
+    static func cardDetail(_ event: CalendarEvent, mode: WidgetRenderingMode) -> Color {
+        if isRecolored(mode) { return .white.opacity(event.isDeclined ? 0.45 : 0.6) }
+        return event.isDeclined ? .white.opacity(0.5) : Color(hex: event.colorHex, brightness: 0.42)
+    }
+
+    /// Title text sitting on an all-day bar, or beside a timed event's capsule.
+    static func eventTitle(_ event: CalendarEvent, mode: WidgetRenderingMode) -> Color {
+        if isRecolored(mode) { return .white.opacity(event.isDeclined ? 0.5 : 1.0) }
+        return event.isDeclined ? declinedColor : .white
+    }
+
+    /// Secondary text beside a timed event (its time range).
+    static func eventDetail(_ event: CalendarEvent, mode: WidgetRenderingMode) -> Color {
+        if isRecolored(mode) { return .white.opacity(event.isDeclined ? 0.35 : 0.6) }
+        return event.isDeclined ? declinedColor.opacity(0.7) : .white.opacity(0.6)
+    }
+}
+
 extension View {
+    /// Puts an event-colored plate behind this view: a solid fill normally, a thin outline when
+    /// the system is recoloring the widget.
+    ///
+    /// **A filled plate swallows its own label in `.accented` / `.vibrant`.** Those modes flatten
+    /// a group's content to one solid color, so a plate and the text drawn on top of it come out
+    /// identical and the text vanishes — which is exactly what happened to every all-day bar,
+    /// every medium-agenda card, and the "today" button. Differing alpha does not rescue it.
+    /// Outlining keeps the shape (and so the all-day-vs-timed distinction) while leaving the
+    /// label on the plain widget background, which is the arrangement timed rows already use and
+    /// the only one observed to survive tinting.
+    func eventPlate<S: InsettableShape>(
+        _ shape: S,
+        fill: Color,
+        mode: WidgetRenderingMode,
+        outline: Color = .white.opacity(0.85),
+        lineWidth: CGFloat = 1
+    ) -> some View {
+        background {
+            if WidgetStyle.isRecolored(mode) {
+                shape.strokeBorder(outline, lineWidth: lineWidth)
+            } else {
+                shape.fill(fill)
+            }
+        }
+    }
+
     /// Renders this view in a leading overlay over a flexible-width, fixed-height box, so its
     /// natural width can't widen the parent (keeps grid columns even) and overflow is
     /// hard-clipped with no ellipsis. Use for dense single-line grid rows.

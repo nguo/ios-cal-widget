@@ -1,4 +1,5 @@
 import SwiftUI
+import WidgetKit
 import CalCore
 
 /// One week (7 columns). All-day events render as **connected spanning bars** laid out by
@@ -9,6 +10,7 @@ struct WeekRowView: View {
     let days: [Date]
     let layout: WeekLayout
     let calendar: Calendar
+    @Environment(\.widgetRenderingMode) private var renderingMode
 
     var body: some View {
         GeometryReader { geo in
@@ -48,16 +50,21 @@ struct WeekRowView: View {
             style: .continuous
         )
         let declined = seg.event.isDeclined
-        return shape
-            .fill(Color(hex: seg.event.colorHex, brightness: declined ? 0.28 : 0.55))
+        // Plate behind, title in front — a filled bar would hide its own title once tinted.
+        return Color.clear
             .frame(width: width, height: WidgetStyle.laneHeight - 1)
+            .eventPlate(shape,
+                        fill: WidgetStyle.allDayFill(seg.event, mode: renderingMode),
+                        mode: renderingMode,
+                        outline: WidgetStyle.eventTitle(seg.event, mode: renderingMode),
+                        lineWidth: 0.75)
             .overlay(alignment: .leading) {
                 Text(seg.event.title)
                     .font(.system(size: 8, weight: .medium))
                     .lineLimit(1)
                     .fixedSize()               // full title; overlay width can't widen the bar
                     .strikethrough(declined)
-                    .foregroundStyle(declined ? WidgetStyle.declinedColor : .white)
+                    .foregroundStyle(WidgetStyle.eventTitle(seg.event, mode: renderingMode))
                     .padding(.leading, 3)
             }
             .clipShape(shape)                  // title spans the bar, hard-clipped at its end
@@ -71,6 +78,7 @@ struct ColumnView: View {
     let timed: DayCellContent?
     let laneSpace: CGFloat
     let calendar: Calendar
+    @Environment(\.widgetRenderingMode) private var renderingMode
 
     private var dayNumber: Int { calendar.component(.day, from: day) }
     private var isToday: Bool { calendar.isDateInToday(day) }
@@ -83,6 +91,7 @@ struct ColumnView: View {
                 .foregroundStyle(isSunday ? WidgetStyle.accent : .white)
                 .frame(height: WidgetStyle.dateHeight, alignment: .leading)
                 .padding(.leading, 1)
+                .widgetAccentable(isSunday) // keeps the Sunday column apart once hue is flattened
 
             Color.clear.frame(height: laneSpace) // all-day bars are overlaid here by WeekRowView
 
@@ -109,14 +118,15 @@ struct ColumnView: View {
         case let .event(event):
             HStack(spacing: 3) {
                 Capsule()
-                    .fill(event.isDeclined ? WidgetStyle.declinedColor : Color(hex: event.colorHex))
+                    .fill(WidgetStyle.eventBar(event, mode: renderingMode))
                     .frame(width: 2, height: 8)
+                    .widgetAccentable()
                 Text(EventTextFormatter.line(for: event, calendar: calendar))
                     .font(.system(size: 8, weight: .medium))
                     .lineLimit(1)
                     .fixedSize()
                     .strikethrough(event.isDeclined)
-                    .foregroundStyle(event.isDeclined ? WidgetStyle.declinedColor : .white)
+                    .foregroundStyle(WidgetStyle.eventTitle(event, mode: renderingMode))
             }
             .padding(.leading, 1)
             .clippedGridRow(height: WidgetStyle.timedRowHeight)

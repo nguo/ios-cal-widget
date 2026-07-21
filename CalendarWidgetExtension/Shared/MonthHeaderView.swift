@@ -1,5 +1,6 @@
 import SwiftUI
 import AppIntents
+import WidgetKit
 import CalCore
 
 /// Top row: bold month label on the left; a "jump to today" button (shown only when paged
@@ -68,6 +69,7 @@ struct TodayIcon: View {
             Rectangle()
                 .fill(WidgetStyle.accent)
                 .frame(height: 4)
+                .widgetAccentable() // the strip is what reads as "today" once hue is flattened
             Text("\(day)")
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(.white)
