@@ -8,7 +8,7 @@ public enum AppConfig {
     /// WidgetKit `kind` for the two-week widget (used for reloadTimelines + the Widget).
     public static let twoWeekWidgetKind = "TwoWeekWidget"
 
-    /// WidgetKit `kind` for the scrolling agenda widget.
+    /// WidgetKit `kind` for the paginating agenda widget.
     public static let agendaWidgetKind = "AgendaWidget"
 
     /// WidgetKit `kind` for the medium (three-column) agenda widget.

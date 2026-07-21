@@ -1,7 +1,11 @@
 # CalWidgetApp
 
-iOS Google Calendar widgets: a two-week grid and two scrolling agendas. The app signs in and
+iOS Google Calendar widgets: a two-week grid and two paginating agendas. The app signs in and
 syncs; the widget extension only renders from a shared cache.
+
+**Vocabulary:** the widgets *paginate* — they never scroll. WidgetKit has no scroll view; a page
+turn is an App Intent that changes a stored offset and reloads the timeline. Reserve "scroll"
+for things that genuinely scroll, i.e. Google Calendar's own views.
 
 **Read this file instead of re-exploring the tree.** If a change makes it wrong, fix it in the
 same commit.

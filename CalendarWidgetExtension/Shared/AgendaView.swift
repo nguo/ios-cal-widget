@@ -81,7 +81,7 @@ struct AgendaView: View {
         }
     }
 
-    /// Fixed reference point, always shown regardless of which page is scrolled into view (so
+    /// Fixed reference point, always shown regardless of which page is in view (so
     /// events below read as relative to now). Stacked "TODAY" over the date, centered, so it
     /// stays compact on a narrow small widget and the date never truncates.
     private var todayAnchor: some View {

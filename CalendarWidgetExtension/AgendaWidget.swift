@@ -2,7 +2,7 @@ import WidgetKit
 import SwiftUI
 import CalCore
 
-/// The small scrolling-agenda widget: a paged list of upcoming days. Delegates rendering to
+/// The small paginating-agenda widget: a paged list of upcoming days. Delegates rendering to
 /// `AgendaView`; paging is handled by `AgendaPageIntent` buttons inside the view.
 struct AgendaWidget: Widget {
     var body: some WidgetConfiguration {
@@ -15,7 +15,7 @@ struct AgendaWidget: Widget {
                 .containerBackground(.black, for: .widget)
         }
         .configurationDisplayName("Agenda")
-        .description("A scrolling agenda of your upcoming days.")
+        .description("A paginating agenda of your upcoming days.")
         .supportedFamilies([.systemSmall])
         .contentMarginsDisabled() // we manage our own padding
     }

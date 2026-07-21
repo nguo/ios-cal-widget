@@ -49,7 +49,7 @@ final class AgendaPaginationTests: XCTestCase {
     }
 
     /// A multi-day all-day event appears once under each day it covers, so the agenda repeats
-    /// it as the reader scrolls forward.
+    /// it as the reader paginates forward.
     func testMultiDayEventAppearsUnderEachCoveredDay() {
         let ordered = slots([allDay("trip", from: 2, toExclusive: 5)])
         XCTAssertEqual(ordered.map(\.day), [day(2), day(3), day(4)])
