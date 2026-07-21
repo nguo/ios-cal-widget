@@ -58,6 +58,11 @@ struct AgendaMediumView: View {
                         rowView(row)
                     }
                 }
+                // Break identity per page. Rows are keyed by position, so without this SwiftUI
+                // matches row N of the old page to row N of the new one and animates the card
+                // shapes between them — the outline visibly sliding into place on every page
+                // turn. Same reason `CalendarGridView` keys off `window.pageOffset`.
+                .id(entry.pageStart)
                 // Claim the space and hard-clip our own overflow so a full page can't grow past the
                 // widget. Centered vertically: the page never fills the budget exactly (the row
                 // count is a floor), and the remainder reads better split above/below than pooled
@@ -152,11 +157,26 @@ struct AgendaMediumView: View {
 
     private func rowView(_ row: Row) -> some View {
         HStack(alignment: .top, spacing: 0) {
-            dateCell(row)
-                .frame(width: WidgetStyle.agendaMediumDateColumnWidth, alignment: .leading)
+            // The date column opens that whole day; the card opens its own event.
+            dayLinked(row) {
+                dateCell(row)
+                    .frame(width: WidgetStyle.agendaMediumDateColumnWidth, alignment: .leading)
+                    .contentShape(Rectangle()) // blank cells below a date are tappable too
+            }
             linked(row) { card(row.event) }
         }
         .frame(height: WidgetStyle.agendaMediumRowHeight)
+    }
+
+    /// Wraps the date column in a link to Google Calendar's day view for that row's day.
+    @ViewBuilder
+    private func dayLinked<Content: View>(_ row: Row, @ViewBuilder content: () -> Content) -> some View {
+        let body = content()
+        if interactive {
+            Link(destination: DeepLinkBuilder.dayURL(for: row.day, calendar: calendar), label: { body })
+        } else {
+            body
+        }
     }
 
     /// Stacked weekday-over-day-number, blank for every event after a group's first. A page that

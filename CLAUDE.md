@@ -119,6 +119,15 @@ lockstep against mismatched boundaries.
 - **`.widgetAccentable()` covers a view *and its subtree*.** Only put it on things with no text
   inside them (timed capsules, the Sunday column, the today strip). Marking a plate that has a
   label inside drags the label into the same recolored group and hides it.
+- **No spinners in a widget — say it in words.** A widget is a static snapshot; WidgetKit never
+  animates it, so a `ProgressView` renders as an inert ring (and tinting flattened the one we
+  had into a pale blob). In-progress state goes in `CalendarGridView`'s `banner`, which shows
+  "Loading…" and takes priority over the stale banner — otherwise the widget tells you to tap
+  refresh *during* a refresh. `ProgressView` in the **app** is fine; the app animates.
+- **Paging intents must guard on `isSyncing` themselves**, not rely on the dimmed controls.
+  The disabled state only reaches the screen once WidgetKit delivers the reloaded timeline, so
+  taps landing before then each advanced the offset and ran ahead of the in-flight fetch.
+  `ShiftWindowIntent` claims the flag *before* writing the new offset, to close that gap.
 - **Read the cache once per timeline build and pass it down** (`AgendaEntryBuilder.live(cache:)`).
   The provider builds an entry per reload point; re-decoding the file for each is real memory
   and CPU inside a jetsam-limited extension.

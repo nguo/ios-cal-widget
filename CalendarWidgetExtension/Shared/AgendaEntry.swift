@@ -17,6 +17,12 @@ struct AgendaEntry: TimelineEntry {
     let canPageBack: Bool
     /// Whether a later page exists — drives the down button, hiding it at the last event.
     let canPageForward: Bool
+    /// Index of this page's first event in the ordered list — the page's identity.
+    ///
+    /// Used as a SwiftUI `.id` so paging *replaces* the rows instead of matching them
+    /// position-by-position against the previous page and animating each one to its new spot
+    /// (`CalendarGridView` keys off `window.pageOffset` for the same reason).
+    var pageStart: Int = 0
     /// Cache generation time; nil means never synced (drives the sign-in prompt).
     let lastSyncedAt: Date?
     /// This instance's calendar selection (nil ⇒ all). Carried so the paging button can hand it

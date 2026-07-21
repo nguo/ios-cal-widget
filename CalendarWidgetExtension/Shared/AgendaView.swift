@@ -33,6 +33,9 @@ struct AgendaView: View {
                                         referenceDate: entry.date, interactive: interactive)
                     }
                 }
+                // Break identity per page so rows are replaced rather than matched against the
+                // previous page and animated into position — see the note in AgendaMediumView.
+                .id(entry.pageStart)
                 // Claim all space below the header and hard-clip our own overflow, so a fuller
                 // page can't grow the VStack past the widget and get vertically centered — which
                 // was nudging the anchor up. agendaPageBudget targets this region; clip is the net.

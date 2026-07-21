@@ -18,16 +18,24 @@ struct ShiftWindowIntent: AppIntent {
 
     func perform() async throws -> some IntentResult {
         guard let store = AppGroupStore(suiteName: AppConfig.appGroupID) else { return .result() }
-        let newOffset = store.twoWeekPageOffset + direction
-        store.twoWeekPageOffset = newOffset
+        // Ignore taps while a page is still loading. `MonthHeaderView` also dims the chevrons,
+        // but that alone can't hold the line: the disabled state only reaches the user once
+        // WidgetKit delivers the reloaded timeline, and taps landing before then would each
+        // advance the offset — three quick taps skipped six weeks ahead of the fetch.
+        guard !store.isSyncing else { return .result() }
 
+        let newOffset = store.twoWeekPageOffset + direction
         let cal = Calendar.calWidget
         let window = DateWindow(referenceDate: Date(), pageOffset: newOffset, weekCount: 2, calendar: cal)
         let alreadyCached = EventCache(appGroupIdentifier: AppConfig.appGroupID)?
             .read()?.covers(start: window.startDate, end: window.endExclusive) ?? false
 
-        // Show the loading spinner only when we actually need to fetch this range.
+        // Claim the in-flight flag *before* publishing the new offset, so a second tap arriving
+        // in between is rejected by the guard above rather than paging again. A cached range
+        // needs no flag — there's nothing to wait for, and flagging it would flicker the
+        // controls disabled for one frame on an instant page turn.
         if !alreadyCached { store.beginSync() }
+        store.twoWeekPageOffset = newOffset
         // Page offset + spinner are grid-only state, so this one is a grid-only reload.
         WidgetReloader.reload(kind: AppConfig.twoWeekWidgetKind) // instant window change (+ spinner)
 

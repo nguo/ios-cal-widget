@@ -55,6 +55,7 @@ enum AgendaEntryBuilder {
             groups: AgendaPagination.groups(from: ordered, offset: start, sizing: sizing),
             canPageBack: start > 0,
             canPageForward: start < (bounds.last ?? 0), // a later page boundary exists
+            pageStart: start,
             lastSyncedAt: cache.generatedAt,
             calendarIds: calendarIds,
             showDeclined: showDeclined,

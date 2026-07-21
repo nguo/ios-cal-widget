@@ -43,41 +43,33 @@ struct CalendarGridView: View {
             }
 
             if entry.needsConfiguration {
-                configBanner
-                    .frame(maxWidth: .infinity, alignment: .center)
+                banner("Edit Widget to choose calendars")
+            // Loading wins over the stale banner: telling the user to tap refresh *during* a
+            // refresh is the state this replaced.
+            } else if entry.isSyncing {
+                banner("Loading…")
             } else if entry.cacheIsStale {
-                staleBanner
-                    .frame(maxWidth: .infinity, alignment: .center)
+                banner(entry.lastSyncedAt == nil ? "Open the app to sign in & sync"
+                                                 : "Tap refresh to load this range")
             }
         }
         .padding(6)
-        .overlay {
-            if entry.isSyncing { loadingOverlay }
-        }
         // Break view identity per page so paging swaps the whole grid instead of matching
         // same-index all-day bars across snapshots and sliding them to their new columns.
         .id(entry.window.pageOffset)
         .transaction { $0.animation = nil }
     }
 
-    /// Shown while a fetch is in flight (manual refresh or paginating into an unfetched range).
-    private var loadingOverlay: some View {
-        ProgressView()
-            .tint(.white)
-            .padding(10)
-            .background(Color.black.opacity(0.55), in: Circle())
-    }
-
-    private var staleBanner: some View {
-        Text(entry.lastSyncedAt == nil ? "Open the app to sign in & sync" : "Tap refresh to load this range")
+    /// The single status line at the bottom of the grid: loading, stale, or "pick calendars".
+    ///
+    /// Deliberately text, not a spinner. A widget is a static snapshot — WidgetKit never
+    /// animates it — so the `ProgressView` this replaced could not spin, and rendered as an
+    /// inert ring in a dark circle that tinting then flattened into a pale blob. Words say
+    /// "loading" in every rendering mode and cost no space the banner wasn't already using.
+    private func banner(_ text: String) -> some View {
+        Text(text)
             .font(.system(size: 9))
             .foregroundStyle(Color.white.opacity(0.5))
-    }
-
-    /// Shown when the widget has no calendars picked yet (long-press → Edit Widget).
-    private var configBanner: some View {
-        Text("Edit Widget to choose calendars")
-            .font(.system(size: 9))
-            .foregroundStyle(Color.white.opacity(0.5))
+            .frame(maxWidth: .infinity, alignment: .center)
     }
 }

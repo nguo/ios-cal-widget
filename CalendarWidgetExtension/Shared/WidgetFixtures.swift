@@ -77,6 +77,7 @@ enum WidgetFixtures {
             groups: AgendaPagination.groups(from: ordered, offset: start, sizing: sizing),
             canPageBack: start > 0,
             canPageForward: start < (bounds.last ?? 0),
+            pageStart: start,
             lastSyncedAt: reference,
             calendarIds: nil
         )
