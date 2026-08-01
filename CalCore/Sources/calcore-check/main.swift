@@ -126,6 +126,16 @@ do {
        "https://www.google.com/calendar/event?eid=YWJjMTIz", "event htmlLink passthrough")
     eq(DeepLinkBuilder.scheduleURL(for: d(2026, 7, 5, 12, 0), calendar: cal).absoluteString,
        "https://calendar.google.com/calendar/u/0/r/agenda/2026/7/5", "schedule (agenda) view URL")
+    eq(DeepLinkBuilder.monthURL(for: d(2026, 7, 5, 12, 0), calendar: cal).absoluteString,
+       "https://calendar.google.com/calendar/u/0/r/month/2026/7/5", "month view URL")
+
+    // The grid's month label and its tap destination both come from window.startDate, so a
+    // window straddling a month boundary can't label one month and open another.
+    let straddling = DateWindow(referenceDate: d(2026, 3, 30, 12), pageOffset: 0, weekCount: 2, calendar: cal)
+    eq(straddling.monthLabel(calendar: cal, locale: Locale(identifier: "en_US")), "MARCH", "label on a straddling window")
+    check(DeepLinkBuilder.monthURL(for: straddling.startDate, calendar: cal)
+            .absoluteString.hasPrefix("https://calendar.google.com/calendar/u/0/r/month/2026/3/"),
+          "month destination matches the label on a straddling window")
 }
 
 // MARK: All-day mapping (build DTOs by decoding JSON, as production does)

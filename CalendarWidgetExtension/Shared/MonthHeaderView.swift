@@ -14,12 +14,14 @@ struct MonthHeaderView: View {
     /// jump-to-today button with that number inside a mini calendar icon.
     var todayDayNumber: Int? = nil
     var interactive: Bool = true
+    /// Where tapping the month label goes: Google Calendar's month view. Built by the caller from
+    /// the same date the label is, so the two can't disagree. A `Link` rather than an App Intent —
+    /// this widget is `.systemMedium`, where `Link` works, and the day cells already use one.
+    var monthDestination: URL? = nil
 
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
-            Text(monthLabel)
-                .font(.system(size: 15, weight: .heavy))
-                .foregroundStyle(.white)
+            monthTitle
 
             Spacer(minLength: 0)
 
@@ -32,6 +34,26 @@ struct MonthHeaderView: View {
             control(intent: ShiftWindowIntent(direction: 1), disabled: isSyncing) { navGlyph("chevron.right") }
             control(intent: RefreshNowIntent(), disabled: isSyncing) { navGlyph("arrow.clockwise") }
         }
+    }
+
+    /// The month label, wrapped in a `Link` when there's somewhere to go. `contentShape` keeps the
+    /// tap target to the text itself — the trailing `Spacer` must stay inert, or a tap anywhere in
+    /// the header's empty middle would open Google Calendar.
+    @ViewBuilder
+    private var monthTitle: some View {
+        if let monthDestination {
+            Link(destination: monthDestination) {
+                monthText.contentShape(Rectangle())
+            }
+        } else {
+            monthText
+        }
+    }
+
+    private var monthText: some View {
+        Text(monthLabel)
+            .font(.system(size: 15, weight: .heavy))
+            .foregroundStyle(.white)
     }
 
     /// Renders `label` as a `Button(intent:)` in the widget, or a static glyph in the app preview.

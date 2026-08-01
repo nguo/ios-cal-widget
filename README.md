@@ -8,9 +8,9 @@ Home Screen widgets that show your Google Calendars. Three of them:
 | **Agenda** | small | A paginated list of upcoming days with events. |
 | **Agenda (Medium)** | medium | A larger paginated list of upcoming days with events. |
 
-For the two-week widget, tapping on a date opens the Google Calendar schedule starting from that date.
-In both agendas, tapping a date opens that day in Google Calendar and tapping an event opens
-that event.
+For the two-week widget, tapping a date opens the Google Calendar schedule starting from that
+date, and tapping the month name opens that month's view. In both agendas, tapping a date opens
+that day in Google Calendar and tapping an event opens that event.
 
 Each placed widget picks its **own** calendars: long-press → **Edit Widget** → **Select
 Calendars**. Declined events are hidden by default and can be shown struck through per widget.

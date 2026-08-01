@@ -26,6 +26,18 @@ public enum DeepLinkBuilder {
         renderURL(view: "agenda", for: date, accountIndex: accountIndex, calendar: calendar)
     }
 
+    /// Opens Google Calendar's month view for the month containing `date`. Backs the grid's month
+    /// label, so it is passed the same `window.startDate` the label is derived from — deriving
+    /// both from one date is what keeps the label and its destination from naming different
+    /// months on a window that straddles a boundary.
+    ///
+    /// NOT device-confirmed, unlike `dayURL` and `scheduleURL` above: it follows the same
+    /// documented `/r/<view>/` render-route pattern, but nobody has yet tapped it on a device to
+    /// check Google Calendar actually lands on the month.
+    public static func monthURL(for date: Date, accountIndex: Int = 0, calendar: Calendar) -> URL {
+        renderURL(view: "month", for: date, accountIndex: accountIndex, calendar: calendar)
+    }
+
     /// Builds a Google Calendar app-render URL `/r/<view>/YYYY/M/D` (month/day non-zero-padded,
     /// matching Google's day-view URLs).
     private static func renderURL(view: String, for date: Date, accountIndex: Int, calendar: Calendar) -> URL {

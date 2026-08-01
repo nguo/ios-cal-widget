@@ -29,7 +29,10 @@ struct CalendarGridView: View {
             MonthHeaderView(monthLabel: entry.window.monthLabel(calendar: calendar),
                             isSyncing: entry.isSyncing,
                             todayDayNumber: todayDayNumber,
-                            interactive: interactive)
+                            interactive: interactive,
+                            // Same date the label comes from, so they always name one month.
+                            monthDestination: DeepLinkBuilder.monthURL(for: entry.window.startDate,
+                                                                       calendar: calendar))
                 .padding(.horizontal, 4)
             WeekdayHeaderRow()
 

@@ -101,6 +101,26 @@ final class FormattingTests: XCTestCase {
         XCTAssertEqual(url.absoluteString, "https://calendar.google.com/calendar/u/0/r/agenda/2026/7/5")
     }
 
+    func testMonthURLUsesNonPaddedMonthRoute() {
+        let d = TestSupport.date(2026, 7, 5, 12, 0, calendar: cal)
+        let url = DeepLinkBuilder.monthURL(for: d, calendar: cal)
+        XCTAssertEqual(url.absoluteString, "https://calendar.google.com/calendar/u/0/r/month/2026/7/5")
+        XCTAssertTrue(DeepLinkBuilder.isTrustedGoogleHost(url), "must survive the deep-link host gate")
+    }
+
+    /// The grid's month label and its tap destination are both derived from `window.startDate`, so
+    /// a window straddling a month boundary can't label one month and open another.
+    func testMonthURLMatchesTheLabelOnAStraddlingWindow() {
+        // Sun 2026-03-29 … Sat 2026-04-11: the window starts in March and ends in April.
+        let ref = TestSupport.date(2026, 3, 30, 12, calendar: cal)
+        let window = DateWindow(referenceDate: ref, pageOffset: 0, weekCount: 2, calendar: cal)
+        XCTAssertEqual(window.monthLabel(calendar: cal, locale: Locale(identifier: "en_US")), "MARCH")
+
+        let url = DeepLinkBuilder.monthURL(for: window.startDate, calendar: cal)
+        XCTAssertTrue(url.absoluteString.hasPrefix("https://calendar.google.com/calendar/u/0/r/month/2026/3/"),
+                      "destination month must match the label, got \(url.absoluteString)")
+    }
+
     func testEventURLIsTheCanonicalHtmlLink() {
         // The event deep link is Google's own htmlLink, used verbatim (device-confirmed to open the
         // Google Calendar app to the exact event).
