@@ -36,8 +36,8 @@ func d(_ y: Int, _ m: Int, _ day: Int, _ h: Int = 0, _ mi: Int = 0) -> Date {
 }
 
 func ev(_ id: String, _ title: String, _ start: Date, _ end: Date, allDay: Bool = false,
-        calendarId: String = "c", color: String = "#000") -> CalendarEvent {
-    CalendarEvent(id: id, calendarId: calendarId, title: title, startDate: start, endDate: end, isAllDay: allDay, colorHex: color)
+        calendarId: String = "c", accountEmail: String = "a@example.com", color: String = "#000") -> CalendarEvent {
+    CalendarEvent(id: id, calendarId: calendarId, accountEmail: accountEmail, title: title, startDate: start, endDate: end, isAllDay: allDay, colorHex: color)
 }
 
 // MARK: DateWindow
@@ -146,7 +146,7 @@ do {
     let single = decodeEvent("""
     {"id":"e2","summary":"Holiday","start":{"date":"2026-07-15"},"end":{"date":"2026-07-16"},"status":"confirmed"}
     """)
-    if let e = try? CalendarEvent.from(single, calendarId: "c", colorHex: "#abc", calendar: cal) {
+    if let e = try? CalendarEvent.from(single, ref: CalendarRef(accountEmail: "a@example.com", calendarId: "c"), colorHex: "#abc", calendar: cal) {
         check(e.isAllDay, "all-day detected")
         eq(cal.component(.day, from: e.lastCoveredDay(in: cal)), 15, "exclusive end steps back to the 15th")
         check(e.covers(day: d(2026, 7, 15, 12), calendar: cal), "covers the 15th")
@@ -156,7 +156,7 @@ do {
     let trip = decodeEvent("""
     {"id":"trip","summary":"Trip","start":{"date":"2026-07-15"},"end":{"date":"2026-07-18"},"status":"confirmed"}
     """)
-    if let e = try? CalendarEvent.from(trip, calendarId: "c", colorHex: "#000", calendar: cal) {
+    if let e = try? CalendarEvent.from(trip, ref: CalendarRef(accountEmail: "a@example.com", calendarId: "c"), colorHex: "#000", calendar: cal) {
         for day in 15...17 { check(e.covers(day: d(2026, 7, day, 12), calendar: cal), "trip covers Jul \(day)") }
         check(!e.covers(day: d(2026, 7, 18, 12), calendar: cal), "trip excludes Jul 18")
     } else { check(false, "trip should map") }
@@ -165,7 +165,7 @@ do {
     {"id":"e3","summary":"X","start":{"dateTime":"2026-07-15T17:30:00-07:00"},"end":{"dateTime":"2026-07-15T18:00:00-07:00"},"status":"cancelled"}
     """)
     do {
-        let result = try CalendarEvent.from(cancelled, calendarId: "c", colorHex: "#000", calendar: cal)
+        let result = try CalendarEvent.from(cancelled, ref: CalendarRef(accountEmail: "a@example.com", calendarId: "c"), colorHex: "#000", calendar: cal)
         check(result == nil, "cancelled event maps to nil")
     } catch { check(false, "cancelled mapping threw: \(error)") }
 }
@@ -181,7 +181,7 @@ do {
     if let resp = try? JSONDecoder().decode(GCalEventsResponse.self, from: json) {
         eq(resp.items.count, 2, "decoded 2 events")
         eq(resp.nextSyncToken, "TOKEN123", "decoded sync token")
-        let mapped = resp.items.compactMap { try? CalendarEvent.from($0, calendarId: "c", colorHex: "#fff", calendar: cal) }.compactMap { $0 }
+        let mapped = resp.items.compactMap { try? CalendarEvent.from($0, ref: CalendarRef(accountEmail: "a@example.com", calendarId: "c"), colorHex: "#fff", calendar: cal) }.compactMap { $0 }
         eq(mapped.count, 2, "mapped 2 events")
         eq(mapped.filter { $0.isAllDay }.count, 1, "one all-day among mapped")
     } else { check(false, "fixture should decode") }
@@ -384,10 +384,10 @@ func runSyncCheck() async {
         check(false, "buildCache returned nil despite reachable calendars")
         return
     }
-    eq(result.events.count, 2, "sync merged events from the calendars that had events")
-    eq(result.sources.count, 3, "every passed calendar retained as an available source")
-    eq(result.events.first { $0.id == "e1" }?.colorHex, "#0B8043", "event color denormalized from its source")
-    eq(result.events.first { $0.id == "e2" }?.isAllDay, true, "all-day preserved through sync")
+    eq(result.cache.events.count, 2, "sync merged events from the calendars that had events")
+    eq(result.cache.sources.count, 3, "every passed calendar retained as an available source")
+    eq(result.cache.events.first { $0.id == "e1" }?.colorHex, "#0B8043", "event color denormalized from its source")
+    eq(result.cache.events.first { $0.id == "e2" }?.isAllDay, true, "all-day preserved through sync")
 
     // A total failure must NOT yield an empty-but-valid cache: the caller would write it and
     // stamp it as freshly synced, silently blanking the widget after a transient network drop.
@@ -546,6 +546,95 @@ do {
     check(!trusted("https://evilgoogle.com/calendar"), "lookalike host rejected")
     check(!trusted("https://google.com.attacker.net"), "suffixed host rejected")
     check(!trusted("http://calendar.google.com"), "non-https rejected")
+}
+
+// MARK: Multi-account — a calendarId alone stops identifying a calendar
+do {
+    let holidays = "en.usa#holiday@group.v.calendar.google.com"
+    let mine = CalendarRef(accountEmail: "me@example.com", calendarId: holidays)
+    eq(CalendarRef(encoded: mine.encoded), mine, "ref round-trips through its encoded form")
+    // A widget configured before multi-account stored a bare id. It must not resolve — picking
+    // whichever account owns a matching id would show a calendar the user never chose.
+    check(CalendarRef(encoded: holidays) == nil, "unqualified value does not parse")
+    check(CalendarRef(encoded: "|c") == nil, "empty account does not parse")
+    eq(CalendarRef(encoded: "me@example.com|weird|id")?.calendarId, "weird|id", "splits on the first separator")
+
+    // Every Google account sees the holidays calendar under the same id, so filtering by id alone
+    // hands both accounts' copies to a widget that selected one.
+    let start = d(2026, 3, 2, 9), end = d(2026, 3, 2, 10)
+    let cache = EventCacheData(
+        generatedAt: start, windowStart: start, windowEnd: end,
+        sources: [CalendarSource(id: holidays, accountEmail: "me@example.com", summary: "Holidays", colorHex: "#000")],
+        events: [
+            ev("h1", "Holiday", start, end, calendarId: holidays, accountEmail: "me@example.com"),
+            ev("h1", "Holiday", start, end, calendarId: holidays, accountEmail: "work@example.com")
+        ]
+    )
+    eq(cache.visibleEvents(refs: [mine], showDeclined: true).map(\.accountEmail), ["me@example.com"],
+       "visibleEvents separates the same calendarId across accounts")
+
+    // Coverage gained a second dimension: a widget can ask for a cached range on a calendar that
+    // was never fetched, which is what happens the moment a calendar is added in Edit Widget.
+    check(cache.covers(refs: [mine]), "covers a fetched ref")
+    check(cache.covers(refs: []), "an unconfigured widget is short of nothing")
+    check(!cache.covers(refs: [CalendarRef(accountEmail: "work@example.com", calendarId: holidays)]),
+          "same id under another account is a different calendar")
+}
+
+// MARK: Multi-account — an account that answers for nothing keeps its previous events
+do {
+    let windowStart = d(2026, 3, 10), windowEnd = d(2026, 3, 20)
+    let previous = EventCacheData(
+        generatedAt: windowStart, windowStart: d(2026, 1, 1), windowEnd: windowEnd, sources: [],
+        events: [
+            ev("gone", "Old", d(2026, 1, 5, 9), d(2026, 1, 5, 10), accountEmail: "work@example.com"),
+            ev("trip", "Trip", d(2026, 3, 8), d(2026, 3, 12), allDay: true, accountEmail: "work@example.com")
+        ]
+    )
+    let fresh = EventCacheData(generatedAt: windowStart, windowStart: windowStart, windowEnd: windowEnd,
+                               sources: [], events: [ev("new", "Lunch", d(2026, 3, 11, 12), d(2026, 3, 11, 13))])
+    let carried = fresh.carryingForward(accounts: ["work@example.com"], from: previous)
+    // Clipped to the new window, which is what keeps "exactly one canonical range" true — a
+    // repeatedly-failing account must not drag its whole history along.
+    eq(Set(carried.events.map(\.id)), ["new", "trip"], "unreachable account carried forward, clipped to the window")
+    eq(carried.windowStart, windowStart, "carry-forward does not widen the window")
+    eq(fresh.carryingForward(accounts: [], from: previous).events.map(\.id), ["new"], "no accounts, no carry-forward")
+
+    // One flaky calendar stays a partial failure; only an account that answered for nothing at
+    // all counts as unreachable.
+    let demanded = [
+        CalendarSource(id: "a", accountEmail: "me@example.com", summary: "A", colorHex: "#000"),
+        CalendarSource(id: "b", accountEmail: "me@example.com", summary: "B", colorHex: "#000"),
+        CalendarSource(id: "c", accountEmail: "work@example.com", summary: "C", colorHex: "#000")
+    ]
+    eq(SyncCoordinator.unreachableAccounts(demanded: demanded,
+                                           failedRefs: [CalendarRef(accountEmail: "me@example.com", calendarId: "a")]),
+       [], "one failed calendar is not an unreachable account")
+    eq(SyncCoordinator.unreachableAccounts(demanded: demanded,
+                                           failedRefs: [CalendarRef(accountEmail: "work@example.com", calendarId: "c")]),
+       ["work@example.com"], "an account whose every calendar failed is unreachable")
+}
+
+// MARK: Catalog — a failed listing must not drop that account's calendars
+do {
+    let catalog = CalendarCatalog(generatedAt: d(2026, 3, 1), sources: [
+        CalendarSource(id: "a", accountEmail: "me@example.com", summary: "Personal", colorHex: "#000"),
+        CalendarSource(id: "b", accountEmail: "me@example.com", summary: "Fun", colorHex: "#000"),
+        CalendarSource(id: "a", accountEmail: "work@example.com", summary: "Work", colorHex: "#000")
+    ])
+    eq(catalog.accountEmails, ["me@example.com", "work@example.com"], "accounts distinct and in order")
+    eq(catalog.resolve([CalendarRef(accountEmail: "work@example.com", calendarId: "a")]).map(\.summary),
+       ["Work"], "resolve matches the full ref, not the id")
+
+    let updated = catalog.replacing(
+        accountEmail: "me@example.com",
+        with: [CalendarSource(id: "c", accountEmail: "me@example.com", summary: "New", colorHex: "#000")],
+        generatedAt: d(2026, 3, 2)
+    )
+    eq(updated.sources(for: "me@example.com").map(\.summary), ["New"], "relisted account replaced")
+    eq(updated.sources(for: "work@example.com").map(\.summary), ["Work"], "other accounts untouched by a relist")
+    eq(catalog.removing(accountEmail: "me@example.com", generatedAt: d(2026, 3, 2)).accountEmails,
+       ["work@example.com"], "removing drops the account entirely")
 }
 
 print("")

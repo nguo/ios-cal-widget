@@ -98,7 +98,7 @@ final class AgendaPaginationTests: XCTestCase {
         let theirs = TestSupport.event(id: "theirs", title: "Theirs", start: day(1).addingTimeInterval(3600),
                                        end: day(1).addingTimeInterval(7200), calendarId: "drop")
         let ordered = AgendaPagination.orderedEvents(
-            reference: day(1), calendar: cal, cache: cache([mine, theirs]), calendarIds: ["keep"]
+            reference: day(1), calendar: cal, cache: cache([mine, theirs]), refs: [TestSupport.ref("keep")]
         )
         XCTAssertEqual(ordered.map(\.event.id), ["mine"])
     }
@@ -254,7 +254,7 @@ final class AgendaPaginationTests: XCTestCase {
         let drop = TestSupport.event(id: "d", title: "D", start: noon,
                                      end: noon.addingTimeInterval(1800), calendarId: "drop")
         let ends = AgendaPagination.upcomingEndTimes(
-            after: noon, before: day(2), cache: cache([keep, drop]), calendarIds: ["keep"]
+            after: noon, before: day(2), cache: cache([keep, drop]), refs: [TestSupport.ref("keep")]
         )
         XCTAssertEqual(ends, [keep.endDate])
     }

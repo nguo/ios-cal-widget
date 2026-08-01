@@ -12,8 +12,9 @@ struct RefreshNowIntent: AppIntent {
 
     func perform() async throws -> some IntentResult {
         // `refreshCanonical` owns the double-tap / concurrent guard: it claims the shared flag and
-        // returns `.skipped` if a sync is already running.
-        let outcome = await SyncCoordinator.refreshCanonical(calendar: .calWidget) {
+        // returns `.skipped` if a sync is already running. Through `WidgetDemand` so the refresh
+        // fetches what the widgets select *now*, not what they selected at the last sync.
+        let outcome = await WidgetDemand.refreshCanonical(calendar: .calWidget) {
             // Runs once the flag is claimed, so the rebuilt entry reads it as in-flight. Only the
             // grid renders that state, so dimming is a grid-only reload.
             WidgetReloader.reload(kind: AppConfig.twoWeekWidgetKind)

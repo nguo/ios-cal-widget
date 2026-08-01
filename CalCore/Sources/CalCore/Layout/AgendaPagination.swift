@@ -22,11 +22,11 @@ public enum AgendaPagination {
         reference: Date,
         calendar: Calendar,
         cache: EventCacheData,
-        calendarIds: Set<String>? = nil,
+        refs: Set<CalendarRef>? = nil,
         showDeclined: Bool = true,
         horizonDays: Int = AppConfig.agendaHorizonDays
     ) -> [AgendaSlot] {
-        let events = cache.visibleEvents(calendarIds: calendarIds, showDeclined: showDeclined)
+        let events = cache.visibleEvents(refs: refs, showDeclined: showDeclined)
         guard !events.isEmpty else { return [] }
 
         let today = calendar.startOfDay(for: reference)
@@ -69,11 +69,11 @@ public enum AgendaPagination {
         after: Date,
         before: Date,
         cache: EventCacheData,
-        calendarIds: Set<String>? = nil,
+        refs: Set<CalendarRef>? = nil,
         showDeclined: Bool = true,
         limit: Int = 12
     ) -> [Date] {
-        let ends = cache.visibleEvents(calendarIds: calendarIds, showDeclined: showDeclined)
+        let ends = cache.visibleEvents(refs: refs, showDeclined: showDeclined)
             .filter { !$0.isAllDay && $0.endDate > after && $0.endDate < before }
             .map(\.endDate)
         // Capped: one entry per event-end is unbounded on a dense day, and WidgetKit holds the

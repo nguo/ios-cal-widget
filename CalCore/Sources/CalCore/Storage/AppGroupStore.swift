@@ -1,9 +1,10 @@
 import Foundation
 
 /// Small typed wrapper over the App Group `UserDefaults`, shared between the app and the
-/// widget extension. Holds lightweight cross-process state: the pagination offset, an
-/// in-flight-sync flag, and the last successful sync time. Calendar selection is no longer
-/// global — it's stored per-widget in each instance's configuration intent.
+/// widget extension. Holds lightweight cross-process state: the pagination offsets, an
+/// in-flight-sync flag, the last successful sync time, the signed-in account list, and the
+/// mirror of what the placed widgets currently select. Calendar selection itself is not here —
+/// it's stored per-widget in each instance's configuration intent.
 ///
 /// `UserDefaults` is injectable so this is testable off-device with a throwaway suite.
 public struct AppGroupStore {
@@ -15,7 +16,8 @@ public struct AppGroupStore {
         static let agendaMediumEventOffset = "agendaMediumEventOffset"
         static let syncStartedAt = "syncStartedAt"
         static let lastSyncedAt = "lastSyncedAt"
-        static let accountEmail = "accountEmail"
+        static let accountEmails = "accountEmails"
+        static let demandedCalendarRefs = "demandedCalendarRefs"
         static let pendingDeepLink = "pendingDeepLink"
     }
 
@@ -97,11 +99,32 @@ public struct AppGroupStore {
         nonmutating set { defaults.set(newValue, forKey: Key.lastSyncedAt) }
     }
 
-    /// The signed-in Google account email (single-account for now). Lets the widget's refresh
-    /// intent find the right refresh token in the shared Keychain.
-    public var accountEmail: String? {
-        get { defaults.string(forKey: Key.accountEmail) }
-        nonmutating set { defaults.set(newValue, forKey: Key.accountEmail) }
+    /// Every signed-in Google account, in the order they were added. This is the authority on
+    /// "am I signed in": the GoogleSignIn SDK holds at most one session and is used only to
+    /// acquire credentials, so it can't answer that question for a second account. Each email is
+    /// also the Keychain key for that account's refresh token, which is what lets the extension
+    /// mint its own access tokens.
+    public var accountEmails: [String] {
+        get { defaults.stringArray(forKey: Key.accountEmails) ?? [] }
+        nonmutating set { defaults.set(newValue, forKey: Key.accountEmails) }
+    }
+
+    /// The `CalendarRef`s some placed widget currently selects — exactly the set a sync fetches
+    /// events for. Written by `WidgetDemand` from `WidgetCenter.getCurrentConfigurations`, read by
+    /// `SyncCoordinator`.
+    ///
+    /// A mirror rather than the source of truth, because the source of truth is WidgetKit and
+    /// `SyncCoordinator` is Foundation-only by design, so it can't ask. Enumerating configurations
+    /// is also async and can fail; falling back to the last known demand fetches a slightly stale
+    /// calendar set, whereas having no fallback would fetch nothing at all.
+    public var demandedCalendarRefs: Set<CalendarRef> {
+        get {
+            Set((defaults.stringArray(forKey: Key.demandedCalendarRefs) ?? [])
+                .compactMap(CalendarRef.init(encoded:)))
+        }
+        nonmutating set {
+            defaults.set(newValue.map(\.encoded).sorted(), forKey: Key.demandedCalendarRefs)
+        }
     }
 
     /// A deep link the widget wants the app to open. A small widget can't follow a `Link`, so a

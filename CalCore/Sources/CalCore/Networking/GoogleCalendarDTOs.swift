@@ -85,7 +85,7 @@ public extension CalendarEvent {
     ///   `CalendarEvent.lastCoveredDay` to step back for the inclusive last day.
     static func from(
         _ gcal: GCalEvent,
-        calendarId: String,
+        ref: CalendarRef,
         colorHex: String,
         calendar: Calendar,
         isFreeBusyOnly: Bool = false
@@ -130,7 +130,8 @@ public extension CalendarEvent {
 
         return CalendarEvent(
             id: gcal.id,
-            calendarId: calendarId,
+            calendarId: ref.calendarId,
+            accountEmail: ref.accountEmail,
             title: gcal.summary ?? fallbackTitle,
             startDate: startDate,
             endDate: endDate,

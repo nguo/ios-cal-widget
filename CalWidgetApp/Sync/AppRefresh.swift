@@ -2,8 +2,8 @@ import Foundation
 import BackgroundTasks
 import CalCore
 
-/// Background + foreground refresh helpers for the app. Both delegate to `SyncCoordinator`
-/// (a canonical rebuild via the shared-Keychain refresh token) and reload every widget.
+/// Background + foreground refresh helpers for the app. Both relist the accounts' calendars and
+/// then run a canonical rebuild via the shared-Keychain refresh tokens, and reload every widget.
 ///
 /// Both are subject to `refreshCanonical`'s cross-process claim, so neither can start behind a
 /// widget intent's sync — these fire on a schedule the user doesn't see, so an unguarded one
@@ -11,10 +11,13 @@ import CalCore
 enum AppRefresh {
     private static var calendar: Calendar { .calWidget }
 
-    /// Runs a canonical sync and reloads every widget. Used by the BGTask handler.
+    /// Relists every account's calendars, syncs, and reloads every widget. Used by the BGTask
+    /// handler. The catalog pass is what makes a calendar added in Google Calendar show up in the
+    /// widget's picker without the user opening this app and waiting.
     static func runBackgroundRefresh() async {
+        await SyncCoordinator.refreshCatalog(calendar: calendar)
         // A skipped sync changed nothing, so there's nothing for the widgets to re-read.
-        if await SyncCoordinator.refreshCanonical(calendar: calendar).ran {
+        if await WidgetDemand.refreshCanonical(calendar: calendar).ran {
             WidgetReloader.reloadAll()
         }
         schedule()
@@ -27,7 +30,8 @@ enum AppRefresh {
            Date().timeIntervalSince(last) < maxAge {
             return
         }
-        if await SyncCoordinator.refreshCanonical(calendar: calendar).ran {
+        await SyncCoordinator.refreshCatalog(calendar: calendar)
+        if await WidgetDemand.refreshCanonical(calendar: calendar).ran {
             WidgetReloader.reloadAll()
         }
     }

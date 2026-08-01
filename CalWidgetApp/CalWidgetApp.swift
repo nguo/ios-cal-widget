@@ -4,7 +4,7 @@ import CalCore
 
 @main
 struct CalWidgetApp: App {
-    @StateObject private var auth = GoogleAuthService()
+    @StateObject private var accountManager = AccountManager()
     @Environment(\.scenePhase) private var scenePhase
 
     /// The app hosts in-app widget previews, so it runs the same page-fit math. Resolve the
@@ -16,8 +16,7 @@ struct CalWidgetApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
-                .environmentObject(auth)
-                .task { await auth.restore() }
+                .environmentObject(accountManager)
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
@@ -37,7 +36,6 @@ struct CalWidgetApp: App {
 }
 
 struct RootView: View {
-    @EnvironmentObject private var auth: GoogleAuthService
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
     /// True once this process has backgrounded at least once — i.e. later foregrounds are fast
@@ -47,11 +45,7 @@ struct RootView: View {
 
     var body: some View {
         NavigationStack {
-            if auth.isSignedIn {
-                CalendarPickerView()
-            } else {
-                SignInView()
-            }
+            AccountsView()
         }
         // A tapped agenda-widget row opens the app (via OpenDeepLinkIntent) with a Google Calendar
         // URL stashed in the App Group; forward to it and clear. Handled on first appear (cold

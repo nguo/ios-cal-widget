@@ -18,7 +18,12 @@ struct CalendarTimelineProvider: AppIntentTimelineProvider {
     func snapshot(for configuration: SelectCalendarsIntent, in context: Context) async -> CalendarTimelineEntry {
         // Gallery preview: sample data, since the real cache may be empty or absent.
         if context.isPreview { return WidgetFixtures.entry() }
-        return CalendarEntryBuilder.live(weekCount: weekCount, calendarIds: configuration.selectedCalendarIds, showDeclined: configuration.showDeclinedEvents)
+        return CalendarEntryBuilder.live(
+            weekCount: weekCount,
+            refs: configuration.selectedRefs,
+            hasUnresolvableSelection: configuration.hasUnresolvableSelection,
+            showDeclined: configuration.showDeclinedEvents
+        )
     }
 
     func timeline(for configuration: SelectCalendarsIntent, in context: Context) async -> Timeline<CalendarTimelineEntry> {
@@ -26,18 +31,22 @@ struct CalendarTimelineProvider: AppIntentTimelineProvider {
         let cal = Calendar.calWidget
 
         // The one place this provider may touch the network. At a week rollover the midnight
-        // reload lands on a window the cache no longer covers; without this the grid shows the
-        // stale banner until a background task the user can't see or trigger happens to run.
+        // reload lands on a window the cache no longer covers; and right after the user edits this
+        // instance's calendars it lands on a selection the cache has never fetched. Without this
+        // either case sits on stale or empty data until a background task the user can't see or
+        // trigger happens to run.
         let offset = AppGroupStore(suiteName: AppConfig.appGroupID)?.twoWeekPageOffset ?? 0
         let window = DateWindow(referenceDate: now, pageOffset: offset, weekCount: weekCount, calendar: cal)
         let refreshed = await CoverageRefresh.syncIfUncovered(
-            start: window.startDate, end: window.endExclusive, calendar: cal, now: now
+            start: window.startDate, end: window.endExclusive,
+            refs: configuration.selectedRefs, calendar: cal, now: now
         )
 
         // Reuse the cache the sync just read back rather than decoding the same file again.
         let entry = CalendarEntryBuilder.live(
             weekCount: weekCount,
-            calendarIds: configuration.selectedCalendarIds,
+            refs: configuration.selectedRefs,
+            hasUnresolvableSelection: configuration.hasUnresolvableSelection,
             showDeclined: configuration.showDeclinedEvents,
             cache: refreshed
         )

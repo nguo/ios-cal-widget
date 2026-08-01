@@ -3,7 +3,10 @@ import Foundation
 /// A Google calendar available to the user, used to resolve per-event color and to
 /// populate each widget's per-instance calendar picker. `id` is Google's calendarId.
 /// Selection is no longer stored here — it lives per-widget in the configuration intent;
-/// the cache holds every available calendar (a superset) so instances can filter at render.
+/// the catalog holds every available calendar across every signed-in account, so instances can
+/// filter at render.
+///
+/// Identify one of these by `ref`, not by `id` — see `CalendarRef`.
 public struct CalendarSource: Codable, Identifiable, Hashable, Sendable {
     public let id: String
     /// Which signed-in Google account owns this calendar (supports multi-account).
@@ -30,6 +33,8 @@ public struct CalendarSource: Codable, Identifiable, Hashable, Sendable {
         self.colorHex = colorHex
         self.isFreeBusyOnly = isFreeBusyOnly
     }
+
+    public var ref: CalendarRef { CalendarRef(accountEmail: accountEmail, calendarId: id) }
 
     private enum CodingKeys: String, CodingKey {
         case id, accountEmail, summary, colorHex, isFreeBusyOnly

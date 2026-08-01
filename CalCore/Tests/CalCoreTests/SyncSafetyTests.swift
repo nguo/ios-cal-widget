@@ -197,7 +197,7 @@ final class BuildCacheFailureTests: XCTestCase {
             .buildCache(sources: sources(2), rangeStart: Date(), rangeEnd: Date(),
                         now: Date(), tokenProvider: { _ in "token" })
         XCTAssertNotNil(cache)
-        XCTAssertEqual(cache?.events.map(\.calendarId), ["cal1"])
+        XCTAssertEqual(cache?.cache.events.map(\.calendarId), ["cal1"])
     }
 
     /// An empty calendar is not a failed one: a successful fetch returning no events must
@@ -208,7 +208,7 @@ final class BuildCacheFailureTests: XCTestCase {
             .buildCache(sources: sources(2), rangeStart: Date(), rangeEnd: Date(),
                         now: Date(), tokenProvider: { _ in "token" })
         XCTAssertNotNil(cache)
-        XCTAssertEqual(cache?.events.count, 0)
+        XCTAssertEqual(cache?.cache.events.count, 0)
     }
 
     func testNoSourcesReturnsNil() async {

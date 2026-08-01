@@ -117,7 +117,7 @@ struct AgendaMediumView: View {
             background: Color.white.opacity(enabled ? 0.15 : 0.06)
         )
         if interactive && enabled {
-            Button(intent: AgendaPageIntent(direction: direction, calendarIds: entry.calendarIds,
+            Button(intent: AgendaPageIntent(direction: direction, refs: entry.refs,
                                             showDeclined: entry.showDeclined, variant: .medium)) {
                 glyph
             }

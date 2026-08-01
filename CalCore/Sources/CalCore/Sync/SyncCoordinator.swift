@@ -15,10 +15,26 @@ public enum SyncOutcome: Equatable, Sendable {
     public var ran: Bool { self != .skipped }
 }
 
-/// Credential-driven sync used by the widget's refresh intent, the pagination intent, and the
-/// app's background/foreground refresh. Reads the refresh token from the shared Keychain and
-/// the selected calendars from the existing cache — no GoogleSignIn SDK needed, so it runs in
-/// the widget extension too. All writes are atomic (`EventCache.write`).
+/// Credential-driven sync used by the widget's refresh intent, the pagination intent, the app's
+/// background/foreground refresh, and the app's own "Sync now". Reads each account's refresh
+/// token from the shared Keychain — no GoogleSignIn SDK needed, so it runs in the widget
+/// extension too. All writes are atomic (`EventCache.write` / `CatalogStore.write`).
+///
+/// Two passes, deliberately separate:
+///
+/// - `refreshCatalog` lists *what calendars exist* across every signed-in account. One request
+///   per account.
+/// - `refreshCanonical` fetches *events*, for the calendars some placed widget actually selected
+///   (`AppGroupStore.demandedCalendarRefs`) — never for the whole catalog.
+///
+/// Splitting them is what makes multi-account viable. Fetching every calendar of every account
+/// was fine at one account and is not at three: 45 event requests won't finish inside an App
+/// Intent's budget and draw Google's rate limiter besides.
+///
+/// **Never call `refreshCanonical` directly from app or extension code — go through
+/// `WidgetDemand.refreshCanonical`,** which refreshes the demand mirror first. The mirror is the
+/// only thing this can read, and a stale one means a calendar the user just selected is never
+/// fetched.
 public enum SyncCoordinator {
     /// The rolling canonical window: today .. `agendaHorizonDays` after. Kept intentionally small —
     /// paging backfills anything beyond it on demand (see `fetchWindowIfNeeded`).
@@ -89,13 +105,82 @@ public enum SyncCoordinator {
 
         let range = canonicalRange(coveringOffset: ctx.store.twoWeekPageOffset, weekCount: weekCount, calendar: calendar, now: now)
         do {
-            let cache = try await fetch(ctx: ctx, calendar: calendar, start: range.start, end: range.end, now: now)
+            let result = try await fetch(ctx: ctx, calendar: calendar, start: range.start, end: range.end, now: now)
+            // An account that answered for nothing at all keeps its previous events rather than
+            // being written out of the cache — see `EventCacheData.carryingForward`.
+            let cache = ctx.existing.map {
+                result.cache.carryingForward(
+                    accounts: unreachableAccounts(demanded: ctx.demanded, failedRefs: result.failedRefs),
+                    from: $0
+                )
+            } ?? result.cache
             try EventCache(appGroupIdentifier: AppConfig.appGroupID)?.write(cache)
             ctx.store.lastSyncedAt = now
             return .succeeded
         } catch {
             return .failed
         }
+    }
+
+    /// Lists every signed-in account's calendars and replaces the catalog. Cheap — one request
+    /// per account — and the only thing that discovers a calendar exists, so the widget's picker
+    /// and every ref lookup depend on it.
+    ///
+    /// An account whose listing fails keeps its previous entries instead of being dropped:
+    /// dropping them empties that half of the picker and makes live widget selections
+    /// unresolvable, which reads to the user as the widget forgetting its calendars over a
+    /// transient network blip.
+    ///
+    /// Not part of the render path. It runs from the app's foreground/background refresh and
+    /// after an account is added or removed.
+    @discardableResult
+    public static func refreshCatalog(calendar: Calendar, now: Date = Date()) async -> Bool {
+        guard
+            let store = AppGroupStore(suiteName: AppConfig.appGroupID),
+            let file = CatalogStore(appGroupIdentifier: AppConfig.appGroupID)
+        else { return false }
+        let accounts = store.accountEmails
+        guard !accounts.isEmpty else { return false }
+
+        let tokens = await accessTokens(for: Set(accounts))
+        let sync = CalendarSyncService(api: GoogleCalendarAPIClient(), calendar: calendar)
+        var catalog = file.read() ?? CalendarCatalog(generatedAt: now, sources: [])
+        var listedAny = false
+
+        for email in accounts {
+            guard let fresh = try? await sync.listCalendars(accountEmail: email, tokenProvider: { account in
+                guard let token = tokens[account] else { throw SyncError.missingCredentials(account) }
+                return token
+            }) else { continue }
+            catalog = catalog.replacing(accountEmail: email, with: fresh, generatedAt: now)
+            listedAny = true
+        }
+
+        // Accounts removed while this ran, or removed by another process, shouldn't linger.
+        for stale in Set(catalog.accountEmails).subtracting(accounts) {
+            catalog = catalog.removing(accountEmail: stale, generatedAt: now)
+        }
+
+        guard listedAny else { return false }
+        try? file.write(catalog)
+        return true
+    }
+
+    /// The accounts whose *every* demanded calendar failed. One flaky calendar is a partial
+    /// failure and stays partial; a whole account going quiet is the multi-account form of a
+    /// total failure, and is what `carryingForward` protects.
+    public static func unreachableAccounts(
+        demanded: [CalendarSource],
+        failedRefs: Set<CalendarRef>
+    ) -> Set<String> {
+        var byAccount: [String: (total: Int, failed: Int)] = [:]
+        for source in demanded {
+            var tally = byAccount[source.accountEmail] ?? (0, 0)
+            tally.total += 1
+            if failedRefs.contains(source.ref) { tally.failed += 1 }
+            byAccount[source.accountEmail] = tally
+        }
+        return Set(byAccount.filter { $0.value.total == $0.value.failed }.keys)
     }
 
     /// If the window for `pageOffset` isn't fully covered by the cache, fetches just that range
@@ -112,15 +197,17 @@ public enum SyncCoordinator {
         calendar: Calendar,
         now: Date = Date()
     ) async -> Bool {
-        guard let ctx = context() else { return false }
+        guard let ctx = context(), let existing = ctx.existing else { return false }
         let window = DateWindow(referenceDate: now, pageOffset: pageOffset, weekCount: weekCount, calendar: calendar)
-        if ctx.existing.covers(start: window.startDate, end: window.endExclusive) { return true }
+        if existing.covers(start: window.startDate, end: window.endExclusive) { return true }
 
         do {
             let fetched = try await fetch(ctx: ctx, calendar: calendar, start: window.startDate, end: window.endExclusive, now: now)
-            let merged = ctx.existing.appending(
-                events: fetched.events,
-                sources: fetched.sources,
+            // No carry-forward needed here: `appending` keeps what's already cached, so an account
+            // that failed simply contributes nothing new.
+            let merged = existing.appending(
+                events: fetched.cache.events,
+                sources: fetched.cache.sources,
                 rangeStart: window.startDate,
                 rangeEnd: window.endExclusive,
                 generatedAt: now
@@ -136,37 +223,76 @@ public enum SyncCoordinator {
 
     private struct Context {
         let store: AppGroupStore
-        let refreshToken: String
-        let existing: EventCacheData
+        /// Catalog ∩ demand: exactly the calendars to fetch events for, possibly across accounts.
+        let demanded: [CalendarSource]
+        /// nil before the first successful sync. Not required to start one — the catalog and the
+        /// demand mirror say what to fetch, which is what lets a first run seed the cache.
+        let existing: EventCacheData?
     }
 
-    /// Gathers the credentials + selected calendars needed for any sync.
+    /// Gathers what any event sync needs: the demanded calendars, resolved through the catalog.
+    ///
+    /// Deliberately does **not** derive the calendars from the existing cache, which is what the
+    /// single-account version did. That made the cache its own input, so nothing could seed it and
+    /// the app had to keep a second, duplicated fetch path just for first run.
     private static func context() -> Context? {
         guard
             let store = AppGroupStore(suiteName: AppConfig.appGroupID),
-            let email = store.accountEmail,
-            let refreshToken = try? KeychainStore(accessGroup: nil).refreshToken(accountEmail: email),
-            let existing = EventCache(appGroupIdentifier: AppConfig.appGroupID)?.read(),
-            !existing.sources.isEmpty
+            !store.accountEmails.isEmpty,
+            let catalog = CatalogStore(appGroupIdentifier: AppConfig.appGroupID)?.read()
         else { return nil }
-        return Context(store: store, refreshToken: refreshToken, existing: existing)
+
+        // Nothing selected anywhere means there is genuinely nothing to fetch — a fresh install
+        // whose widgets are all unconfigured. Treated as "couldn't start", same as signed out.
+        let demanded = catalog.resolve(store.demandedCalendarRefs)
+        guard !demanded.isEmpty else { return nil }
+
+        return Context(
+            store: store,
+            demanded: demanded,
+            existing: EventCache(appGroupIdentifier: AppConfig.appGroupID)?.read()
+        )
     }
 
-    private static func fetch(ctx: Context, calendar: Calendar, start: Date, end: Date, now: Date) async throws -> EventCacheData {
-        let access = try await TokenRefreshService(clientID: AppConfig.googleClientID)
-            .accessToken(refreshToken: ctx.refreshToken)
+    /// One access token per account, minted up front. Sequential because the count is accounts,
+    /// not calendars — a handful at most. An account whose token can't be minted is simply absent
+    /// from the result; its calendars then fail individually and land in `failedRefs`, which is
+    /// what lets a revoked account be carried forward instead of blanking.
+    private static func accessTokens(for accounts: Set<String>) async -> [String: String] {
+        let keychain = KeychainStore(accessGroup: nil)
+        let service = TokenRefreshService(clientID: AppConfig.googleClientID)
+        var tokens: [String: String] = [:]
+        for email in accounts.sorted() {
+            guard
+                let refreshToken = try? keychain.refreshToken(accountEmail: email),
+                let access = try? await service.accessToken(refreshToken: refreshToken)
+            else { continue }
+            tokens[email] = access.token
+        }
+        return tokens
+    }
+
+    private static func fetch(
+        ctx: Context, calendar: Calendar, start: Date, end: Date, now: Date
+    ) async throws -> CalendarSyncService.SyncResult {
+        let tokens = await accessTokens(for: Set(ctx.demanded.map(\.accountEmail)))
+        guard !tokens.isEmpty else { throw SyncError.allCalendarsFailed }
+
         let sync = CalendarSyncService(api: GoogleCalendarAPIClient(), calendar: calendar)
-        guard let cache = await sync.buildCache(
-            sources: ctx.existing.sources,
+        guard let result = await sync.buildCache(
+            sources: ctx.demanded,
             rangeStart: start,
             rangeEnd: end,
             now: now,
-            tokenProvider: { _ in access.token }
+            tokenProvider: { account in
+                guard let token = tokens[account] else { throw SyncError.missingCredentials(account) }
+                return token
+            }
         ) else {
             // Every calendar failed. Throwing here means the callers' `catch` paths skip the
             // write entirely, leaving the last good cache in place.
             throw SyncError.allCalendarsFailed
         }
-        return cache
+        return result
     }
 }

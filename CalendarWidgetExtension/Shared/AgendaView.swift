@@ -99,7 +99,7 @@ struct AgendaView: View {
     }
 
     private func pageButton(_ direction: Int, _ systemName: String) -> some View {
-        Button(intent: AgendaPageIntent(direction: direction, calendarIds: entry.calendarIds, showDeclined: entry.showDeclined)) {
+        Button(intent: AgendaPageIntent(direction: direction, refs: entry.refs, showDeclined: entry.showDeclined)) {
             Image(systemName: systemName)
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(.white)

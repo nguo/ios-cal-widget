@@ -24,11 +24,29 @@ enum TestSupport {
         end: Date,
         isAllDay: Bool = false,
         color: String = "#000000",
-        calendarId: String = "cal1"
+        calendarId: String = "cal1",
+        accountEmail: String = "a@example.com"
     ) -> CalendarEvent {
         CalendarEvent(
-            id: id, calendarId: calendarId, title: title,
+            id: id, calendarId: calendarId, accountEmail: accountEmail, title: title,
             startDate: start, endDate: end, isAllDay: isAllDay, colorHex: color
         )
+    }
+
+    static func ref(_ calendarId: String, account: String = "a@example.com") -> CalendarRef {
+        CalendarRef(accountEmail: account, calendarId: calendarId)
+    }
+
+    static func source(
+        _ calendarId: String,
+        account: String = "a@example.com",
+        summary: String = "Cal",
+        color: String = "#000000"
+    ) -> CalendarSource {
+        CalendarSource(id: calendarId, accountEmail: account, summary: summary, colorHex: color)
+    }
+
+    static func catalog(_ sources: [CalendarSource], generatedAt: Date = Date()) -> CalendarCatalog {
+        CalendarCatalog(generatedAt: generatedAt, sources: sources)
     }
 }

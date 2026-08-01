@@ -15,8 +15,8 @@ struct AgendaPageIntent: AppIntent {
     @Parameter(title: "Direction")
     var direction: Int
 
-    /// The requesting widget instance's calendar selection (empty ⇒ all). Kept so the page
-    /// boundaries computed here match the filtered list the widget actually shows.
+    /// The requesting widget instance's calendar selection as encoded `CalendarRef`s (empty ⇒
+    /// all). Kept so the page boundaries computed here match the filtered list the widget shows.
     @Parameter(title: "Calendars")
     var calendarIds: [String]
 
@@ -32,9 +32,9 @@ struct AgendaPageIntent: AppIntent {
     var variant: String
 
     init() {}
-    init(direction: Int, calendarIds: Set<String>? = nil, showDeclined: Bool = false, variant: AgendaVariant = .small) {
+    init(direction: Int, refs: Set<CalendarRef>? = nil, showDeclined: Bool = false, variant: AgendaVariant = .small) {
         self.direction = direction
-        self.calendarIds = calendarIds.map(Array.init) ?? []
+        self.calendarIds = refs.map { $0.map(\.encoded) } ?? []
         self.showDeclined = showDeclined
         self.variant = variant.rawValue
     }
@@ -43,9 +43,9 @@ struct AgendaPageIntent: AppIntent {
         guard let store = AppGroupStore(suiteName: AppConfig.appGroupID) else { return .result() }
         let agenda = AgendaVariant(rawValue: variant) ?? .small
 
-        let ids = calendarIds.isEmpty ? nil : Set(calendarIds)
+        let refs = calendarIds.isEmpty ? nil : Set(calendarIds.compactMap(CalendarRef.init(encoded:)))
         let ordered = EventCache(appGroupIdentifier: AppConfig.appGroupID)?.read()
-            .map { AgendaPagination.orderedEvents(reference: Date(), calendar: .calWidget, cache: $0, calendarIds: ids, showDeclined: showDeclined) } ?? []
+            .map { AgendaPagination.orderedEvents(reference: Date(), calendar: .calWidget, cache: $0, refs: refs, showDeclined: showDeclined) } ?? []
         let bounds = AgendaPagination.boundaries(ordered, sizing: agenda.pageSizing)
 
         // Same boundary walk the builder uses, so a tap always lands where the widget renders.

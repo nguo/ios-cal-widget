@@ -5,8 +5,11 @@ import Foundation
 /// never needs a join. Produced by the sync layer, consumed by the widget.
 public struct CalendarEvent: Codable, Identifiable, Hashable, Sendable {
     public let id: String
-    /// FK to `CalendarSource.id`.
+    /// Google's calendarId. Not a key on its own — it repeats across accounts, so pair it with
+    /// `accountEmail` via `ref`.
     public let calendarId: String
+    /// The signed-in account this event was fetched through.
+    public let accountEmail: String
     public let title: String
     /// For timed events: the actual start instant. For all-day: start-of-day.
     public let startDate: Date
@@ -31,6 +34,7 @@ public struct CalendarEvent: Codable, Identifiable, Hashable, Sendable {
     public init(
         id: String,
         calendarId: String,
+        accountEmail: String,
         title: String,
         startDate: Date,
         endDate: Date,
@@ -41,6 +45,7 @@ public struct CalendarEvent: Codable, Identifiable, Hashable, Sendable {
     ) {
         self.id = id
         self.calendarId = calendarId
+        self.accountEmail = accountEmail
         self.title = title
         self.startDate = startDate
         self.endDate = endDate
@@ -51,15 +56,22 @@ public struct CalendarEvent: Codable, Identifiable, Hashable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, calendarId, title, startDate, endDate, isAllDay, colorHex, htmlLink, isDeclined
+        case id, calendarId, accountEmail, title, startDate, endDate, isAllDay, colorHex, htmlLink, isDeclined
     }
 
     /// Custom decode so `htmlLink` and `isDeclined` — both added after the cache format shipped —
     /// tolerate older caches that omit them. Encoding stays synthesized.
+    ///
+    /// `accountEmail` is deliberately **not** given that treatment. A pre-multi-account cache has
+    /// no account on its events, and any default we invented would attribute them to an account
+    /// that may not own them. Requiring it makes the whole file fail to decode, `read()` returns
+    /// nil, and the next sync repopulates — which is the migration, and why there is no migration
+    /// code.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
         calendarId = try c.decode(String.self, forKey: .calendarId)
+        accountEmail = try c.decode(String.self, forKey: .accountEmail)
         title = try c.decode(String.self, forKey: .title)
         startDate = try c.decode(Date.self, forKey: .startDate)
         endDate = try c.decode(Date.self, forKey: .endDate)
@@ -72,22 +84,27 @@ public struct CalendarEvent: Codable, Identifiable, Hashable, Sendable {
     /// Identity of an event *within the cache*. `id` alone is not it: Google's event id is unique
     /// only within a calendar, and the same meeting reachable through two calendars comes back
     /// once per calendar carrying the same `id`. Those are two rows the widget draws separately
-    /// (each in its own calendar's color), so anything that de-dupes or keys events must use this
-    /// pair — de-duping on `id` collapses them to one, and "incoming wins" then leaves the
+    /// (each in its own calendar's color), so anything that de-dupes or keys events must use the
+    /// full triple — de-duping on `id` collapses them to one, and "incoming wins" then leaves the
     /// survivor showing whichever calendar's color arrived last.
+    ///
+    /// The account is part of it for the same reason one level up: a meeting on a calendar shared
+    /// with two of your accounts comes back once per account under one `(calendarId, id)`.
     ///
     /// Same root cause as the "never key a `ForEach` on `CalendarEvent.id`" rule.
     public struct CacheKey: Hashable, Sendable {
-        public let calendarId: String
+        public let ref: CalendarRef
         public let id: String
 
-        public init(calendarId: String, id: String) {
-            self.calendarId = calendarId
+        public init(ref: CalendarRef, id: String) {
+            self.ref = ref
             self.id = id
         }
     }
 
-    public var cacheKey: CacheKey { CacheKey(calendarId: calendarId, id: id) }
+    public var ref: CalendarRef { CalendarRef(accountEmail: accountEmail, calendarId: calendarId) }
+
+    public var cacheKey: CacheKey { CacheKey(ref: ref, id: id) }
 
     /// The last calendar day this event covers, inclusive. For all-day events the
     /// stored `endDate` is exclusive (Google's convention), so this steps back one day.

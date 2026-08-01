@@ -22,9 +22,23 @@ public struct CalendarSyncService {
         self.maxConcurrentFetches = max(1, maxConcurrentFetches)
     }
 
-    /// Builds the canonical cache for the given range across *every* source passed in — the
-    /// cache is a superset of all available calendars, and each widget instance filters it to
-    /// its own selection at render. Fetches calendars concurrently.
+    /// What a sync produced, plus which calendars didn't answer. The failure list isn't
+    /// diagnostic decoration: with several accounts signed in, the caller needs it to tell "one
+    /// calendar was flaky" from "this whole account is revoked", and only the latter warrants
+    /// carrying the previous events forward.
+    public struct SyncResult: Sendable {
+        public let cache: EventCacheData
+        public let failedRefs: Set<CalendarRef>
+
+        public init(cache: EventCacheData, failedRefs: Set<CalendarRef>) {
+            self.cache = cache
+            self.failedRefs = failedRefs
+        }
+    }
+
+    /// Builds the canonical cache for the given range across every source passed in — which is
+    /// the *demanded* set, i.e. the calendars some placed widget selected, possibly spanning
+    /// accounts. Fetches calendars concurrently.
     ///
     /// A *partial* failure is tolerated: that calendar's events are omitted and the rest still
     /// populate, since partial data beats no data. A *total* failure is not — returns nil when
@@ -37,8 +51,9 @@ public struct CalendarSyncService {
         rangeEnd: Date,
         now: Date,
         tokenProvider: @escaping AccessTokenProvider
-    ) async -> EventCacheData? {
-        let perCalendar: [[CalendarEvent]?] = await withTaskGroup(of: [CalendarEvent]?.self) { group in
+    ) async -> SyncResult? {
+        typealias Fetched = (ref: CalendarRef, events: [CalendarEvent]?)
+        let perCalendar: [Fetched] = await withTaskGroup(of: Fetched.self) { group in
             var next = 0
             // Keep at most `maxConcurrentFetches` requests in flight: start a batch, then add
             // one more each time a result lands.
@@ -46,31 +61,53 @@ public struct CalendarSyncService {
                 let source = sources[next]
                 next += 1
                 group.addTask {
-                    await self.fetchEvents(for: source, rangeStart: rangeStart, rangeEnd: rangeEnd, tokenProvider: tokenProvider)
+                    (source.ref, await self.fetchEvents(for: source, rangeStart: rangeStart, rangeEnd: rangeEnd, tokenProvider: tokenProvider))
                 }
             }
             while next < min(maxConcurrentFetches, sources.count) { addTask() }
 
-            var collected: [[CalendarEvent]?] = []
-            while let events = await group.next() {
-                collected.append(events)
+            var collected: [Fetched] = []
+            while let result = await group.next() {
+                collected.append(result)
                 if next < sources.count { addTask() }
             }
             return collected
         }
 
-        let succeeded = perCalendar.compactMap { $0 }
+        let succeeded = perCalendar.compactMap(\.events)
         // Nothing came back at all — treat as a failed sync, not an empty calendar.
         guard !sources.isEmpty, !succeeded.isEmpty else { return nil }
 
         let merged = succeeded.flatMap { $0 }.sorted { $0.startDate < $1.startDate }
-        return EventCacheData(
-            generatedAt: now,
-            windowStart: rangeStart,
-            windowEnd: rangeEnd,
-            sources: sources,
-            events: merged
+        return SyncResult(
+            cache: EventCacheData(
+                generatedAt: now,
+                windowStart: rangeStart,
+                windowEnd: rangeEnd,
+                sources: sources,
+                events: merged
+            ),
+            failedRefs: Set(perCalendar.filter { $0.events == nil }.map(\.ref))
         )
+    }
+
+    /// Every calendar the account can see, mapped to `CalendarSource`. One request per account
+    /// per sync, which is what makes demand-driven event fetching affordable: adding an account
+    /// costs this call, not an event fetch per calendar it owns.
+    public func listCalendars(
+        accountEmail: String,
+        tokenProvider: @escaping AccessTokenProvider
+    ) async throws -> [CalendarSource] {
+        let token = try await tokenProvider(accountEmail)
+        return try await api.calendarList(accessToken: token).map { entry in
+            CalendarSource(
+                id: entry.id,
+                accountEmail: accountEmail,
+                summary: entry.summary ?? entry.id,
+                colorHex: entry.backgroundColor ?? "#4285F4",
+                isFreeBusyOnly: entry.isFreeBusyOnly
+            )
+        }
     }
 
     /// One calendar's events, or nil if the fetch failed (distinct from a genuinely empty
@@ -94,7 +131,7 @@ public struct CalendarSyncService {
                     timeMax: rangeEnd
                 )
                 return page.events.compactMap { gcal in
-                    try? CalendarEvent.from(gcal, calendarId: source.id, colorHex: source.colorHex,
+                    try? CalendarEvent.from(gcal, ref: source.ref, colorHex: source.colorHex,
                                             calendar: calendar, isFreeBusyOnly: source.isFreeBusyOnly)
                 }
             } catch {
@@ -120,4 +157,7 @@ public struct CalendarSyncService {
 public enum SyncError: Error, Equatable {
     /// Every calendar's fetch failed — almost always no network or a revoked token.
     case allCalendarsFailed
+    /// No usable access token for this account. Thrown per calendar, so the other accounts'
+    /// calendars still fetch and this one's land in `SyncResult.failedRefs`.
+    case missingCredentials(String)
 }

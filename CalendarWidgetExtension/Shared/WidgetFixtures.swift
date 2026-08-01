@@ -19,19 +19,19 @@ enum WidgetFixtures {
         }
 
         let events: [CalendarEvent] = [
-            .init(id: "1", calendarId: "a", title: "Lunch", startDate: at(0, 12), endDate: at(0, 13), isAllDay: false, colorHex: green),
-            .init(id: "2", calendarId: "a", title: "Museum", startDate: at(0, 15), endDate: at(0, 16, 30), isAllDay: false, colorHex: purple),
-            .init(id: "3", calendarId: "b", title: "Cycling", startDate: at(2, 17, 30), endDate: at(2, 19), isAllDay: false, colorHex: blue),
+            .init(id: "1", calendarId: "a", accountEmail: "me@example.com", title: "Lunch", startDate: at(0, 12), endDate: at(0, 13), isAllDay: false, colorHex: green),
+            .init(id: "2", calendarId: "a", accountEmail: "me@example.com", title: "Museum", startDate: at(0, 15), endDate: at(0, 16, 30), isAllDay: false, colorHex: purple),
+            .init(id: "3", calendarId: "b", accountEmail: "me@example.com", title: "Cycling", startDate: at(2, 17, 30), endDate: at(2, 19), isAllDay: false, colorHex: blue),
             // Multi-day all-day events (spanning bars): a 3-day trip, an overlapping conference,
             // and a longer one that crosses the week boundary.
-            .init(id: "4", calendarId: "b", title: "Trip to Portland", startDate: day(1), endDate: day(4), isAllDay: true, colorHex: blue),
-            .init(id: "4b", calendarId: "a", title: "Conf", startDate: day(2), endDate: day(4), isAllDay: true, colorHex: purple),
-            .init(id: "4c", calendarId: "b", title: "Vacation", startDate: day(5), endDate: day(10), isAllDay: true, colorHex: green),
-            .init(id: "5", calendarId: "a", title: "Standup", startDate: at(8, 9), endDate: at(8, 9, 30), isAllDay: false, colorHex: blue),
-            .init(id: "6", calendarId: "a", title: "1:1", startDate: at(8, 11), endDate: at(8, 11, 30), isAllDay: false, colorHex: green),
-            .init(id: "7", calendarId: "a", title: "Review", startDate: at(8, 14), endDate: at(8, 15), isAllDay: false, colorHex: purple),
-            .init(id: "8", calendarId: "a", title: "Dinner", startDate: at(8, 18), endDate: at(8, 20), isAllDay: false, colorHex: green),
-            .init(id: "9", calendarId: "a", title: "Late", startDate: at(8, 21), endDate: at(8, 22), isAllDay: false, colorHex: blue)
+            .init(id: "4", calendarId: "b", accountEmail: "me@example.com", title: "Trip to Portland", startDate: day(1), endDate: day(4), isAllDay: true, colorHex: blue),
+            .init(id: "4b", calendarId: "a", accountEmail: "me@example.com", title: "Conf", startDate: day(2), endDate: day(4), isAllDay: true, colorHex: purple),
+            .init(id: "4c", calendarId: "b", accountEmail: "me@example.com", title: "Vacation", startDate: day(5), endDate: day(10), isAllDay: true, colorHex: green),
+            .init(id: "5", calendarId: "a", accountEmail: "me@example.com", title: "Standup", startDate: at(8, 9), endDate: at(8, 9, 30), isAllDay: false, colorHex: blue),
+            .init(id: "6", calendarId: "a", accountEmail: "me@example.com", title: "1:1", startDate: at(8, 11), endDate: at(8, 11, 30), isAllDay: false, colorHex: green),
+            .init(id: "7", calendarId: "a", accountEmail: "me@example.com", title: "Review", startDate: at(8, 14), endDate: at(8, 15), isAllDay: false, colorHex: purple),
+            .init(id: "8", calendarId: "a", accountEmail: "me@example.com", title: "Dinner", startDate: at(8, 18), endDate: at(8, 20), isAllDay: false, colorHex: green),
+            .init(id: "9", calendarId: "a", accountEmail: "me@example.com", title: "Late", startDate: at(8, 21), endDate: at(8, 22), isAllDay: false, colorHex: blue)
         ]
 
         let sources = [
@@ -79,7 +79,7 @@ enum WidgetFixtures {
             canPageForward: start < (bounds.last ?? 0),
             pageStart: start,
             lastSyncedAt: reference,
-            calendarIds: nil
+            refs: nil
         )
     }
 }

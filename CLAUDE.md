@@ -1,8 +1,8 @@
 # CalWidgetApp
 
-iOS Google Calendar widgets: a two-week grid and two paginating agendas. The app owns sign-in;
-everything renders from a shared cache, which the app syncs and — on three specific paths — the
-widget extension does too (see Data flow).
+iOS Google Calendar widgets: a two-week grid and two paginating agendas. The app owns sign-in for
+any number of Google accounts; everything renders from a shared cache, which the app syncs and —
+on three specific paths — the widget extension does too (see Data flow).
 
 **Vocabulary:** the widgets *paginate* — they never scroll. WidgetKit has no scroll view; a page
 turn is an App Intent that changes a stored offset and reloads the timeline. Reserve "scroll"
@@ -17,13 +17,15 @@ same commit.
 |---|---|---|
 | `CalCore/` | SPM package (both) | Models, networking, storage, formatting, layout math. Foundation-only, testable off-device. |
 | `CalCore/…/Layout/` | SPM package (both) | Layout *decisions* as pure data: `WeekLayout`, `DayCellContent`, `AgendaPagination`. UI measurements injected, never read. |
-| `CalWidgetApp/` | app | Sign-in, sync management, the calendar picker + in-app widget previews. |
-| `CalendarWidgetExtension/` | extension only | Widget declarations, timeline providers, `SelectCalendarsIntent`. |
-| `CalendarWidgetExtension/Shared/` | **app + extension** | Views, entries, builders, intents, style. |
+| `CalWidgetApp/` | app | Account management, sync management, in-app widget previews. |
+| `CalendarWidgetExtension/` | extension only | Widget declarations and timeline providers. |
+| `CalendarWidgetExtension/Shared/` | **app + extension** | Views, entries, builders, intents (including `SelectCalendarsIntent`), style, `WidgetDemand`. |
 
 `Shared/` compiling into *both* targets is the rule that's easy to get wrong: the app hosts
 in-app previews, so anything it renders must live there. Widget declarations and timeline
-providers stay at the extension root.
+providers stay at the extension root. `SelectCalendarsIntent` is in `Shared/` rather than the
+extension root for a second reason — the app has to read placed widgets' configurations to know
+what to fetch (see `WidgetDemand`), so it needs the type.
 
 **What belongs in CalCore is decided by dependencies, not by target.** The criterion is
 *Foundation-only, therefore testable off-device* — which is what makes `swift test` and
@@ -37,19 +39,42 @@ UI's numbers — `WeekLayout` takes `maxRowsPerCell`, `AgendaPagination` takes `
 
 ## Data flow
 
-Sync is one-way — everything flows cache-ward, and nothing reads back up the chain:
+Sync is one-way — everything flows cache-ward, and nothing reads back up the chain — and it runs
+in **two passes over two files**:
 
 ```
-GoogleCalendarAPIClient → CalendarSyncService (map + merge, color denormalized)
-  → EventCacheData → EventCache.write (atomic, App Group) → widgets read
+                          ┌ refreshCatalog:  calendarList per account
+GoogleCalendarAPIClient ──┤   → CalendarCatalog → calendars.json   (what calendars EXIST)
+                          └ refreshCanonical: events for catalog ∩ widget demand
+                              → CalendarSyncService (map + merge, color denormalized)
+                              → EventCacheData → events.json       (what widgets SHOW)
 ```
 
-`SyncCoordinator` is the canonical sync — it reads the refresh token from the shared Keychain
-and needs no GoogleSignIn SDK, so it runs in the extension too. Triggered by `AppRefresh`
-(app foreground/background), `RefreshNowIntent` and `ShiftWindowIntent` (widget), and
-`CoverageRefresh` (either timeline provider, when the reload lands on a window the cache no
-longer covers). Cross-process scratch state (pagination offsets, pending deep link, sync flag)
-lives in `AppGroupStore`.
+The split is what makes multi-account affordable. Listing calendars is one request per account;
+fetching *events* for every calendar of every account is 45 requests at three accounts, which
+won't finish inside an App Intent's budget and draws Google's rate limiter. So events are fetched
+only for calendars some placed widget actually selected. The catalog is what the widget's picker
+offers, and it must be gated on rather than the events cache in any "can the user configure this
+yet" decision — nothing is fetched until something is picked, so gating on events deadlocks.
+
+`SyncCoordinator` owns both passes — it reads each account's refresh token from the shared
+Keychain and needs no GoogleSignIn SDK, so it runs in the extension too. Triggered by `AppRefresh`
+(app foreground/background), `AppSyncManager.syncNow` (the app's button), `RefreshNowIntent` and
+`ShiftWindowIntent` (widget), and `CoverageRefresh` (either timeline provider, when the reload
+lands on a window or a calendar set the cache doesn't cover). Cross-process scratch state
+(pagination offsets, pending deep link, sync flag, the account registry, the demand mirror) lives
+in `AppGroupStore`.
+
+**Accounts.** `AppGroupStore.accountEmails` is the authority on who's signed in, not the
+GoogleSignIn SDK — the SDK holds one session at a time and is used only to *acquire* a refresh
+token per account, which goes into the shared Keychain under that email. Every access token
+afterwards, app and extension alike, comes from `TokenRefreshService`. `AccountManager` runs that
+flow; it signs the SDK out immediately after capturing the token, so the next "Add account" shows
+the chooser instead of silently re-adding the same account.
+
+Calendar *selection* is per placed widget instance and may span accounts — one widget can show
+calendars from two Google accounts. It's stored in that instance's `SelectCalendarsIntent`
+configuration as encoded `CalendarRef`s.
 
 **The widget extension does network, on those three paths only.** It's a real constraint worth
 stating precisely rather than as "widgets only read the cache", which is what this said while
@@ -58,9 +83,6 @@ nothing else. What networks is a paging tap into an uncached window, the refresh
 coverage check that runs before a build — the last gated on `covers()` being false, so an
 ordinary reload still costs nothing. All three go through `SyncCoordinator` and hold the shared
 sync flag while they run, so they can't stack up on each other or on the app's syncs.
-
-Calendar *selection* is per placed widget instance, stored in its `SelectCalendarsIntent`
-configuration — not globally. The cache is a superset; filtering happens at render.
 
 ## The widgets
 
@@ -123,9 +145,24 @@ lockstep against mismatched boundaries.
   calendar is in scope; `DateWindowTests` pins it in Santiago. The one acceptable use is the
   `?? now.addingTimeInterval(86_400)` fallbacks in the timeline providers, which are only
   reached if calendar arithmetic fails outright and only pick a reload time.
-- **Filter cached events through `EventCacheData.visibleEvents(calendarIds:showDeclined:)`.**
+- **Filter cached events through `EventCacheData.visibleEvents(refs:showDeclined:)`.**
   It is the single definition of "visible". The reload scheduler and the render path must agree,
   or the widget wakes for events it doesn't draw.
+- **A calendar is `CalendarRef` (account + calendarId), never a calendarId alone.** Google's ids
+  are unique only within an account, and the overlaps are ordinary rather than exotic: every
+  account sees `en.usa#holiday@group.v.calendar.google.com` under that exact id, and a calendar
+  shared with two of your accounts carries one id in both. So filtering, selecting, or de-duping
+  on the id merges two different calendars. Same shape as the `CalendarEvent.id` rule below, one
+  level up. `CalendarRef.encoded` is the wire form for the places that can only carry a string
+  (`AppIntent` parameters, the demand mirror), and **`init?(encoded:)` returning nil for an
+  unqualified value is load-bearing** — that's what makes a widget configured before
+  multi-account show the reconfigure prompt instead of resolving to some other account's calendar.
+- **Coverage is two-dimensional: a date range *and* a calendar set.** `covers(start:end:)` was
+  the whole story when every calendar was fetched. With demand-driven fetching a widget can ask
+  for a range the cache holds, on a calendar it has never fetched — which is what happens the
+  instant the user adds a calendar in Edit Widget. Both `CoverageRefresh` and the grid's
+  `cacheIsStale` check `covers(refs:)` too; dropping either leaves the new calendar rendering
+  empty until something unrelated happens to sync.
 - **Never construct a `DateFormatter` in a render or parse path** — init costs milliseconds and
   these run per row and per event. Go through `DateFormatterCache.shared.formatter(...)` (keyed
   by timezone, so it survives travel and DST) or `ISO8601Parsers`. Never mutate one you get back.
@@ -157,7 +194,8 @@ lockstep against mismatched boundaries.
   falls a day short of the horizon per day that passes, and at a week rollover the grid's window
   moves to a new Sunday the cache can't cover. Both providers call
   `CoverageRefresh.syncIfUncovered` before building, which is the **only** networking in the
-  render path — it is gated on `covers()` being false, so a covered reload still costs nothing.
+  render path — it is gated on both `covers()` checks (range *and* refs), so a covered reload
+  still costs nothing.
   The sync claim matters here: all three widgets wake on the same midnight tick and would
   otherwise each fetch the same range. `refreshCanonical` holds that claim, so the first widget
   to arrive does the work and the others get `.skipped`, render from disk, and pick up the
@@ -178,14 +216,15 @@ lockstep against mismatched boundaries.
   memory and CPU inside a jetsam-limited extension. The grid builds one entry, but still gets
   the cache handed to it — `CoverageRefresh` returns the copy it read back after syncing, and
   decoding the same bytes a second time to build from them is free to avoid.
-- **`CalendarEvent.id` does not identify an event — `cacheKey` (calendar + id) does.** It's
+- **`CalendarEvent.id` does not identify an event — `cacheKey` (ref + id) does.** It's
   Google's event id, unique only *within* a calendar, so the same meeting reachable through two
-  calendars comes back once per calendar under one id. Two consequences, same root cause:
-  never key a `ForEach` on it (duplicate SwiftUI ids render the first row twice in the wrong
-  calendar's color — key by position), and never key a de-dupe or lookup on it
+  calendars — or through two accounts — comes back once per route under one id. Two consequences,
+  same root cause: never key a `ForEach` on it (duplicate SwiftUI ids render the first row twice
+  in the wrong calendar's color — key by position), and never key a de-dupe or lookup on it
   (`EventCacheData.appending` did, which collapsed the copies and left the survivor wearing
-  whichever calendar arrived last). `EventCacheTests` pins both halves of the merge behaviour:
-  copies on different calendars survive, a refetch of one calendar still replaces its own.
+  whichever calendar arrived last). `EventCacheTests` and `MultiAccountTests` pin every half:
+  copies on different calendars survive, copies on different accounts survive, and a refetch of
+  one calendar still replaces its own.
 - **A widget tap can only open this app.** `Link` does *not* launch Google Calendar; iOS hands
   the URL to `CalWidgetApp.onOpenURL`, which forwards it. `OpenDeepLinkIntent` exists only
   because `systemSmall` ignores `Link` — it is not a way to skip the app hop. The 500ms
@@ -201,23 +240,32 @@ lockstep against mismatched boundaries.
   caller needs an enumerable list of widget kinds, and a list that falls behind a newly added
   widget strands it on stale data, which is a worse failure than a rebuild that happens at most
   once per rollover and can't loop (the retriggered build finds `covers()` true).
-- **A total sync failure must not be written.** `CalendarSyncService.buildCache` returns nil
-  when *every* calendar fails; callers skip the write so the last good cache survives. Writing
-  the empty result blanked the widget while leaving it looking freshly synced. A partial
-  failure still writes — some data beats none.
+- **A total sync failure must not be written — and "total" is now per account too.**
+  `CalendarSyncService.buildCache` returns nil when *every* calendar fails; callers skip the write
+  so the last good cache survives. Writing the empty result blanked the widget while leaving it
+  looking freshly synced. A partial failure still writes — some data beats none.
+  With several accounts signed in there's a second version of exactly that bug: account B answers
+  while account A is entirely revoked, the write succeeds, and every widget showing A goes blank
+  behind a fresh-looking timestamp. So `buildCache` reports `failedRefs`,
+  `SyncCoordinator.unreachableAccounts` finds the accounts that answered for *nothing*, and
+  `EventCacheData.carryingForward` revives their previous events — clipped to the new window, which
+  is what keeps the one-canonical-range property below true. One flaky calendar stays a partial
+  failure; only a whole silent account is carried.
 - **Every sync replaces the cache with exactly one canonical range — `refreshCanonical`.** That
   is the whole reason no pruning exists: nothing accumulates, so nothing needs trimming.
   Pagination (`fetchWindowIfNeeded`) is the one writer that *merges*, and the next sync reclaims
   whatever it added — so back-paging stays cached within a session but never permanently. Don't
   reintroduce a union-with-existing-window refresh; that was `refetchAll`, and it grew the
   refetched range without bound for anyone who refreshed from the widget instead of the app.
-  **This applies to the app's `AppSyncManager.syncNow` too**, which is where a second copy of
-  that union survived after `refetchAll` was deleted: it read the cache's own `windowStart` /
-  `windowEnd` and unioned against them, so each sync widened the window the *next* sync would
-  union against. `syncNow` keeps its own fetch (it needs the GoogleSignIn token and the
-  freshly-listed sources, which `refreshCanonical` can't supply on first run) but must take its
-  range from `canonicalRange(coveringOffset:)` unmodified. No sync's range may be a function of
-  what is currently cached — that is the whole property, and it is why nothing needs pruning.
+  No sync's range may be a function of what is currently cached — that is the whole property, and
+  it is why nothing needs pruning.
+  `AppSyncManager.syncNow` used to be the standing exception and no longer is. It kept a private
+  fetch because `refreshCanonical` derived the calendars to fetch *from the cache* and so could
+  never seed one, and that copy carried its own union-against-the-cached-window arithmetic — each
+  sync widening the window the next would union against. Now that what to fetch comes from the
+  catalog and the widget demand, the shared path seeds from nothing and `syncNow` is
+  `refreshCatalog` + `WidgetDemand.refreshCanonical`. **Don't reintroduce a second fetch path
+  here**; the duplicate is what let the drift hide.
 - **That one range must satisfy both widgets, which want different windows.** The grid is
   week-aligned (most-recent Sunday … +`gridWeekCount` weeks); the agenda is
   today … +`agendaHorizonDays`.
@@ -253,10 +301,19 @@ lockstep against mismatched boundaries.
   what left `AppRefresh`'s foreground and background syncs unguarded in both directions.
   Callers that reload widgets to clear a spinner must check `.ran`, not just success: a
   `.skipped` call never touched the in-flight state, and whoever holds the claim will reload.
-  Two paths still claim externally, both deliberately: `ShiftWindowIntent` (it must hold the
-  claim from before it publishes the new offset until after `fetchWindowIfNeeded` returns) and
-  `AppSyncManager.syncNow` (it fetches with the app's own signed-in sources rather than going
-  through `refreshCanonical`).
+  One path still claims externally, deliberately: `ShiftWindowIntent`, which must hold the claim
+  from before it publishes the new offset until after `fetchWindowIfNeeded` returns.
+- **Never call `SyncCoordinator.refreshCanonical` from app or extension code — go through
+  `WidgetDemand.refreshCanonical`.** Events are fetched only for calendars some placed widget
+  selects, and the coordinator learns that from `AppGroupStore.demandedCalendarRefs`, which
+  `WidgetDemand.refreshMirror` writes from `WidgetCenter.getCurrentConfigurations`. Call past the
+  wrapper and the mirror goes stale, so a calendar the user just picked is never fetched — the
+  widget renders it empty and every later sync reproduces the same gap.
+  The split exists because `SyncCoordinator` lives in CalCore and must stay Foundation-only, so it
+  cannot ask WidgetKit itself. `getCurrentConfigurations` is the authority (a removed widget
+  disappears from it, which a registry we maintained could never notice) but it is async and can
+  fail; on failure the previous mirror is left alone on purpose — a slightly stale calendar set
+  beats fetching nothing.
 - **Deep links are gated by `DeepLinkBuilder.isTrustedGoogleHost`.** `hasSuffix("google.com")`
   also matches `evilgoogle.com`. Both the `onOpenURL` router and the pending-link forwarder
   validate; the forwarder clears the stashed link *before* validating so a rejected one can't
@@ -264,6 +321,10 @@ lockstep against mismatched boundaries.
 - Cross-account duplicate events currently render twice by design; deduping was deferred. The
   cache preserves them deliberately (see `cacheKey`) — if they're ever collapsed, it has to
   happen at render, where the widget can pick which calendar's color to show.
+- `DeepLinkBuilder`'s `accountIndex` (the `/u/N/` segment) is still hardcoded to 0, so a tapped
+  row belonging to a second account opens Google Calendar's *first* account. Events now carry
+  `accountEmail`, so `?authuser=<email>` is the plausible fix — but it is not device-confirmed,
+  and that file only claims what has actually been tapped on a device. Left as-is deliberately.
 - Sync is **full-refetch only**. `nextSyncToken` is surfaced by the API client but not yet
   stored, so every refresh refetches the whole window — a known, deliberate gap.
 

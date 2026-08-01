@@ -18,7 +18,7 @@ final class GCalMappingTests: XCTestCase {
             end: GCalEventDateTime(date: nil, dateTime: "2026-07-15T18:00:00-07:00", timeZone: nil),
             status: "confirmed", htmlLink: nil, attendees: nil
         )
-        let e = try XCTUnwrap(try CalendarEvent.from(g, calendarId: "cal1", colorHex: "#123456", calendar: cal))
+        let e = try XCTUnwrap(try CalendarEvent.from(g, ref: TestSupport.ref("cal1"), colorHex: "#123456", calendar: cal))
         XCTAssertFalse(e.isAllDay)
         XCTAssertFalse(e.isDeclined)
         XCTAssertEqual(EventTextFormatter.timePrefix(for: e, calendar: cal), "5:30p")
@@ -34,7 +34,7 @@ final class GCalMappingTests: XCTestCase {
             end: GCalEventDateTime(date: "2026-07-16", dateTime: nil, timeZone: nil),
             status: "confirmed", htmlLink: nil, attendees: nil
         )
-        let e = try XCTUnwrap(try CalendarEvent.from(g, calendarId: "cal1", colorHex: "#abcdef", calendar: cal))
+        let e = try XCTUnwrap(try CalendarEvent.from(g, ref: TestSupport.ref("cal1"), colorHex: "#abcdef", calendar: cal))
         XCTAssertTrue(e.isAllDay)
         let lastDay = e.lastCoveredDay(in: cal)
         XCTAssertEqual(cal.component(.day, from: lastDay), 15, "exclusive end.date must step back to the 15th")
@@ -50,7 +50,7 @@ final class GCalMappingTests: XCTestCase {
             end: GCalEventDateTime(date: "2026-07-18", dateTime: nil, timeZone: nil),
             status: "confirmed", htmlLink: nil, attendees: nil
         )
-        let e = try XCTUnwrap(try CalendarEvent.from(g, calendarId: "cal1", colorHex: "#000", calendar: cal))
+        let e = try XCTUnwrap(try CalendarEvent.from(g, ref: TestSupport.ref("cal1"), colorHex: "#000", calendar: cal))
         for day in 15...17 {
             XCTAssertTrue(e.covers(day: TestSupport.date(2026, 7, day, 12, calendar: cal), calendar: cal), "should cover Jul \(day)")
         }
@@ -64,7 +64,7 @@ final class GCalMappingTests: XCTestCase {
             end: GCalEventDateTime(date: nil, dateTime: "2026-07-15T18:00:00-07:00", timeZone: nil),
             status: "cancelled", htmlLink: nil, attendees: nil
         )
-        XCTAssertNil(try CalendarEvent.from(g, calendarId: "cal1", colorHex: "#000", calendar: cal))
+        XCTAssertNil(try CalendarEvent.from(g, ref: TestSupport.ref("cal1"), colorHex: "#000", calendar: cal))
     }
 
     /// A calendar shared as free/busy returns every event with no `summary`. "(No title)" would
@@ -76,12 +76,12 @@ final class GCalMappingTests: XCTestCase {
             end: GCalEventDateTime(date: nil, dateTime: "2026-07-15T18:00:00-07:00", timeZone: nil),
             status: "confirmed", htmlLink: nil, attendees: nil
         )
-        let busy = try XCTUnwrap(try CalendarEvent.from(g, calendarId: "shared", colorHex: "#000",
+        let busy = try XCTUnwrap(try CalendarEvent.from(g, ref: TestSupport.ref("shared"), colorHex: "#000",
                                                         calendar: cal, isFreeBusyOnly: true))
         XCTAssertEqual(busy.title, "Busy")
 
         // Same payload on a calendar you can actually read is a genuinely untitled event.
-        let untitled = try XCTUnwrap(try CalendarEvent.from(g, calendarId: "mine", colorHex: "#000",
+        let untitled = try XCTUnwrap(try CalendarEvent.from(g, ref: TestSupport.ref("mine"), colorHex: "#000",
                                                              calendar: cal, isFreeBusyOnly: false))
         XCTAssertEqual(untitled.title, "(No title)")
     }
@@ -95,7 +95,7 @@ final class GCalMappingTests: XCTestCase {
             end: GCalEventDateTime(date: nil, dateTime: "2026-07-15T18:00:00-07:00", timeZone: nil),
             status: "confirmed", htmlLink: nil, attendees: nil
         )
-        let e = try XCTUnwrap(try CalendarEvent.from(g, calendarId: "shared", colorHex: "#000",
+        let e = try XCTUnwrap(try CalendarEvent.from(g, ref: TestSupport.ref("shared"), colorHex: "#000",
                                                       calendar: cal, isFreeBusyOnly: true))
         XCTAssertEqual(e.title, "Standup")
     }
@@ -135,8 +135,8 @@ final class GCalMappingTests: XCTestCase {
             id: "d2", summary: "Attend", start: start, end: end, status: "confirmed", htmlLink: nil,
             attendees: [GCalAttendee(selfAttendee: true, responseStatus: "accepted")]
         )
-        let e1 = try XCTUnwrap(try CalendarEvent.from(declined, calendarId: "cal1", colorHex: "#000", calendar: cal))
-        let e2 = try XCTUnwrap(try CalendarEvent.from(accepted, calendarId: "cal1", colorHex: "#000", calendar: cal))
+        let e1 = try XCTUnwrap(try CalendarEvent.from(declined, ref: TestSupport.ref("cal1"), colorHex: "#000", calendar: cal))
+        let e2 = try XCTUnwrap(try CalendarEvent.from(accepted, ref: TestSupport.ref("cal1"), colorHex: "#000", calendar: cal))
         XCTAssertTrue(e1.isDeclined)
         XCTAssertFalse(e2.isDeclined)
     }
@@ -169,7 +169,7 @@ final class GCalMappingTests: XCTestCase {
         XCTAssertEqual(resp.nextSyncToken, "TOKEN123")
 
         let mapped = try resp.items.compactMap {
-            try CalendarEvent.from($0, calendarId: "cal1", colorHex: "#fff", calendar: cal)
+            try CalendarEvent.from($0, ref: TestSupport.ref("cal1"), colorHex: "#fff", calendar: cal)
         }
         XCTAssertEqual(mapped.count, 2)
         XCTAssertEqual(mapped.filter { $0.isAllDay }.count, 1)

@@ -28,7 +28,7 @@ enum CalendarEntryBuilder {
         return result
     }
 
-    /// Builds an entry from the shared cache, scoped to this widget instance's `calendarIds`
+    /// Builds an entry from the shared cache, scoped to this widget instance's `refs`
     /// (nil ⇒ show every calendar). When there's no cache, returns an *empty* entry (honest
     /// "no data" state) rather than sample fixtures — samples are reserved for the widget
     /// placeholder, the gallery snapshot, the in-app preview, and Xcode previews.
@@ -39,7 +39,8 @@ enum CalendarEntryBuilder {
     /// from the same bytes is pure waste inside a memory-capped extension.
     static func live(
         weekCount: Int,
-        calendarIds: Set<String>? = nil,
+        refs: Set<CalendarRef>? = nil,
+        hasUnresolvableSelection: Bool = false,
         showDeclined: Bool = false,
         reference: Date = Date(),
         offsetOverride: Int? = nil,
@@ -52,13 +53,22 @@ enum CalendarEntryBuilder {
         let window = DateWindow(referenceDate: reference, pageOffset: offset, weekCount: weekCount, calendar: cal)
 
         let cache = preloaded ?? EventCache(appGroupIdentifier: AppConfig.appGroupID)?.read()
-        let needsConfiguration = EventCacheData.needsConfiguration(calendarIds: calendarIds, cache: cache)
-        let events = cache?.visibleEvents(calendarIds: calendarIds, showDeclined: showDeclined) ?? []
+        let needsConfiguration = EventCacheData.needsConfiguration(
+            refs: refs,
+            hasUnresolvable: hasUnresolvableSelection,
+            catalog: CatalogStore(appGroupIdentifier: AppConfig.appGroupID)?.read()
+        )
+        let events = cache?.visibleEvents(refs: refs, showDeclined: showDeclined) ?? []
+        // Stale means "short of what this instance asked for", which is a range *and* a calendar
+        // set — a newly selected calendar isn't in the cache no matter how fresh the dates are.
+        let isStale = cache.map {
+            !$0.covers(start: window.startDate, end: window.endExclusive) || !$0.covers(refs: refs ?? [])
+        } ?? true
         return CalendarTimelineEntry(
             date: reference,
             window: window,
             eventsByDay: cache == nil ? [:] : groupByDay(events: events, window: window, calendar: cal),
-            cacheIsStale: cache.map { !$0.covers(start: window.startDate, end: window.endExclusive) } ?? true,
+            cacheIsStale: isStale,
             isSyncing: isSyncing,
             lastSyncedAt: cache?.generatedAt,
             needsConfiguration: needsConfiguration

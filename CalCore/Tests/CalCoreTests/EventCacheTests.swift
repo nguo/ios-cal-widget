@@ -146,19 +146,35 @@ final class EventCacheTests: XCTestCase {
 
     /// nil means "every calendar" (previews, gallery) and must never read as unconfigured.
     func testNeedsConfigurationOnlyForAnEmptySelection() {
-        let s0 = TestSupport.date(2026, 3, 1, 0, calendar: cal)
-        let cache = EventCacheData(generatedAt: s0, windowStart: s0, windowEnd: s0, sources: [], events: [])
+        let catalog = TestSupport.catalog([TestSupport.source("work")])
 
-        XCTAssertTrue(EventCacheData.needsConfiguration(calendarIds: [], cache: cache))
-        XCTAssertFalse(EventCacheData.needsConfiguration(calendarIds: nil, cache: cache))
-        XCTAssertFalse(EventCacheData.needsConfiguration(calendarIds: ["work"], cache: cache))
+        XCTAssertTrue(EventCacheData.needsConfiguration(refs: [], hasUnresolvable: false, catalog: catalog))
+        XCTAssertFalse(EventCacheData.needsConfiguration(refs: nil, hasUnresolvable: false, catalog: catalog))
+        XCTAssertFalse(EventCacheData.needsConfiguration(
+            refs: [TestSupport.ref("work")], hasUnresolvable: false, catalog: catalog
+        ))
     }
 
-    /// Before the first sync there are no calendars to choose from, so the widget has to show the
-    /// sign-in prompt rather than asking the user to configure something that doesn't exist yet.
-    func testNeedsConfigurationIsFalseBeforeAnySync() {
-        XCTAssertFalse(EventCacheData.needsConfiguration(calendarIds: [], cache: nil))
-        XCTAssertFalse(EventCacheData.needsConfiguration(calendarIds: nil, cache: nil))
+    /// A widget configured before multi-account stores bare calendar ids that name no account.
+    /// Those parse to nothing, so the selection must read as unconfigured however many of them
+    /// there are — resolving them against whichever account owns a matching id would silently
+    /// show a calendar the user never picked.
+    func testNeedsConfigurationForAnUnresolvableSelection() {
+        let catalog = TestSupport.catalog([TestSupport.source("work")])
+
+        XCTAssertTrue(EventCacheData.needsConfiguration(
+            refs: [TestSupport.ref("work")], hasUnresolvable: true, catalog: catalog
+        ))
+        XCTAssertNil(CalendarRef(encoded: "work"))
+    }
+
+    /// Before the accounts have been listed there are no calendars to choose from, so the widget
+    /// has to show the sign-in prompt rather than asking the user to configure something that
+    /// doesn't exist yet. Gated on the *catalog*: with demand-driven fetching the events cache is
+    /// empty until something is picked, so gating on it would deadlock.
+    func testNeedsConfigurationIsFalseBeforeAnyCatalog() {
+        XCTAssertFalse(EventCacheData.needsConfiguration(refs: [], hasUnresolvable: false, catalog: nil))
+        XCTAssertFalse(EventCacheData.needsConfiguration(refs: nil, hasUnresolvable: true, catalog: nil))
     }
 
     /// Duplicates that survive share a start date exactly, so start alone can't order them and

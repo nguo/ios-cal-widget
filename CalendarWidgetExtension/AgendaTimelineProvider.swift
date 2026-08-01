@@ -19,12 +19,14 @@ struct AgendaTimelineProvider: AppIntentTimelineProvider {
     func snapshot(for configuration: SelectCalendarsIntent, in context: Context) async -> AgendaEntry {
         // Gallery preview: sample data, since the real cache may be empty or absent.
         if context.isPreview { return WidgetFixtures.agendaEntry(variant: variant) }
-        return AgendaEntryBuilder.live(calendarIds: configuration.selectedCalendarIds,
+        return AgendaEntryBuilder.live(refs: configuration.selectedRefs,
+                                       hasUnresolvableSelection: configuration.hasUnresolvableSelection,
                                        showDeclined: configuration.showDeclinedEvents, variant: variant)
     }
 
     func timeline(for configuration: SelectCalendarsIntent, in context: Context) async -> Timeline<AgendaEntry> {
-        let ids = configuration.selectedCalendarIds
+        let refs = configuration.selectedRefs
+        let unresolvable = configuration.hasUnresolvableSelection
         let showDeclined = configuration.showDeclinedEvents
         let now = Date()
         let cal = Calendar.calWidget
@@ -34,10 +36,11 @@ struct AgendaTimelineProvider: AppIntentTimelineProvider {
 
         // The one place this provider may touch the network. The agenda's horizon walks forward
         // with "today", but the cached window doesn't, so each midnight reload leaves it a day
-        // shorter at the far edge until something syncs.
+        // shorter at the far edge until something syncs — and a calendar the user just added to
+        // this instance isn't in the cache at all until something fetches it.
         let horizonEnd = cal.date(byAdding: .day, value: AppConfig.agendaHorizonDays, to: cal.startOfDay(for: now)) ?? now
         let refreshed = await CoverageRefresh.syncIfUncovered(
-            start: cal.startOfDay(for: now), end: horizonEnd, calendar: cal, now: now
+            start: cal.startOfDay(for: now), end: horizonEnd, refs: refs, calendar: cal, now: now
         )
 
         // Read the cache ONCE and thread it through every entry below. Each `live` call used to
@@ -52,11 +55,12 @@ struct AgendaTimelineProvider: AppIntentTimelineProvider {
         if let cache {
             references += AgendaPagination.upcomingEndTimes(
                 after: now, before: tomorrow, cache: cache,
-                calendarIds: ids, showDeclined: showDeclined
+                refs: refs, showDeclined: showDeclined
             )
         }
         let entries = references.map {
-            AgendaEntryBuilder.live(calendarIds: ids, showDeclined: showDeclined,
+            AgendaEntryBuilder.live(refs: refs, hasUnresolvableSelection: unresolvable,
+                                    showDeclined: showDeclined,
                                     variant: variant, reference: $0, cache: cache)
         }
 
