@@ -104,7 +104,7 @@ final class AppSyncManager: ObservableObject {
             // `fetchWindowIfNeeded` if the user pages back.
             let (start, end) = SyncCoordinator.canonicalRange(
                 coveringOffset: store?.twoWeekPageOffset ?? 0,
-                weekCount: 2,
+                weekCount: AppConfig.gridWeekCount,
                 calendar: calendar,
                 now: now
             )

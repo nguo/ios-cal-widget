@@ -33,18 +33,26 @@ enum CalendarEntryBuilder {
     /// "no data" state) rather than sample fixtures — samples are reserved for the widget
     /// placeholder, the gallery snapshot, the in-app preview, and Xcode previews.
     /// `offsetOverride` lets a caller page independently of the shared offset the widget uses.
-    static func live(weekCount: Int, calendarIds: Set<String>? = nil, showDeclined: Bool = false, reference: Date = Date(), offsetOverride: Int? = nil) -> CalendarTimelineEntry {
+    ///
+    /// `cache` may be supplied by a caller that already read it — the timeline provider gets one
+    /// back from `CoverageRefresh` when it syncs, and re-decoding the file to build the entry
+    /// from the same bytes is pure waste inside a memory-capped extension.
+    static func live(
+        weekCount: Int,
+        calendarIds: Set<String>? = nil,
+        showDeclined: Bool = false,
+        reference: Date = Date(),
+        offsetOverride: Int? = nil,
+        cache preloaded: EventCacheData? = nil
+    ) -> CalendarTimelineEntry {
         let cal = calendar()
         let store = AppGroupStore(suiteName: AppConfig.appGroupID)
         let offset = offsetOverride ?? store?.twoWeekPageOffset ?? 0
         let isSyncing = store?.isSyncing ?? false
         let window = DateWindow(referenceDate: reference, pageOffset: offset, weekCount: weekCount, calendar: cal)
 
-        let cache = EventCache(appGroupIdentifier: AppConfig.appGroupID)?.read()
-        // A non-nil, empty selection means the widget hasn't been configured yet (nil = show
-        // all). Prompt to configure — but only once synced, so a
-        // never-synced widget still shows the sign-in prompt.
-        let needsConfiguration = calendarIds?.isEmpty == true && cache != nil
+        let cache = preloaded ?? EventCache(appGroupIdentifier: AppConfig.appGroupID)?.read()
+        let needsConfiguration = EventCacheData.needsConfiguration(calendarIds: calendarIds, cache: cache)
         let events = cache?.visibleEvents(calendarIds: calendarIds, showDeclined: showDeclined) ?? []
         return CalendarTimelineEntry(
             date: reference,

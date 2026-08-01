@@ -27,10 +27,7 @@ enum AgendaEntryBuilder {
         let cal = Calendar.calWidget
         let store = AppGroupStore(suiteName: AppConfig.appGroupID)
         let cache = preloaded ?? EventCache(appGroupIdentifier: AppConfig.appGroupID)?.read()
-        // A non-nil, empty selection means the widget hasn't been configured yet (nil = show all,
-        // used by previews). Prompt to configure — but only once synced, so a never-synced widget
-        // still shows the sign-in prompt (you can't pick calendars before they exist).
-        let needsConfiguration = calendarIds?.isEmpty == true && cache != nil
+        let needsConfiguration = EventCacheData.needsConfiguration(calendarIds: calendarIds, cache: cache)
 
         guard let cache, !needsConfiguration else {
             return AgendaEntry(

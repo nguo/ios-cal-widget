@@ -44,6 +44,19 @@ public struct EventCacheData: Codable, Equatable, Sendable {
         }
     }
 
+    /// Whether a widget instance should prompt the user to pick calendars instead of rendering.
+    ///
+    /// A non-nil but *empty* selection means the widget was placed and never configured; nil means
+    /// "show every calendar" and is what the previews and the gallery use. The cache must exist
+    /// first — you can't choose calendars before a sync has discovered any, so a never-synced
+    /// widget shows the sign-in prompt instead.
+    ///
+    /// Static, and taking the cache as an optional, because both entry builders need exactly this
+    /// decision and had it written out separately with the reasoning copy-pasted alongside.
+    public static func needsConfiguration(calendarIds: Set<String>?, cache: EventCacheData?) -> Bool {
+        calendarIds?.isEmpty == true && cache != nil
+    }
+
     /// PAGINATION path: widen the cache to include a freshly fetched range, merging in
     /// its events/sources without discarding what's already cached. De-dupes by
     /// `CalendarEvent.cacheKey` (incoming wins). Use when the user pages into a range not yet

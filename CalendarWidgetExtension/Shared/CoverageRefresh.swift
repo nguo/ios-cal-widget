@@ -38,7 +38,13 @@ enum CoverageRefresh {
         // returning nil here stops the reload, and with it any chance of a reload/sync loop.
         guard let fresh = file.read(), fresh.covers(start: start, end: end) else { return nil }
 
-        WidgetReloader.reloadAll() // the cache changed — siblings built from the stale copy
+        // The cache changed and the siblings built from the stale copy. This also reloads the
+        // caller, which is still mid-build — one redundant rebuild, which then finds `covers()`
+        // true and stops, so it can't loop. Targeting only the siblings would need an enumerable
+        // list of widget kinds, and a list that falls behind a newly added widget leaves that
+        // widget stranded on stale data — a worse failure than a rebuild that happens at most
+        // once per rollover. The caller uses the returned cache, so its first build isn't wasted.
+        WidgetReloader.reloadAll()
         return fresh
     }
 }

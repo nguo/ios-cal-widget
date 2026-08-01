@@ -52,7 +52,7 @@ enum WidgetFixtures {
     static func entry(pageOffset: Int = 0, isSyncing: Bool = false, reference: Date = Date()) -> CalendarTimelineEntry {
         let cal = Calendar.calWidget
         let data = cache(calendar: cal, reference: reference)
-        let window = DateWindow(referenceDate: reference, pageOffset: pageOffset, weekCount: 2, calendar: cal)
+        let window = DateWindow(referenceDate: reference, pageOffset: pageOffset, weekCount: AppConfig.gridWeekCount, calendar: cal)
         return CalendarTimelineEntry(
             date: reference,
             window: window,

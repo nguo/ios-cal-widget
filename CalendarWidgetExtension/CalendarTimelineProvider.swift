@@ -30,9 +30,17 @@ struct CalendarTimelineProvider: AppIntentTimelineProvider {
         // stale banner until a background task the user can't see or trigger happens to run.
         let offset = AppGroupStore(suiteName: AppConfig.appGroupID)?.twoWeekPageOffset ?? 0
         let window = DateWindow(referenceDate: now, pageOffset: offset, weekCount: weekCount, calendar: cal)
-        await CoverageRefresh.syncIfUncovered(start: window.startDate, end: window.endExclusive, calendar: cal, now: now)
+        let refreshed = await CoverageRefresh.syncIfUncovered(
+            start: window.startDate, end: window.endExclusive, calendar: cal, now: now
+        )
 
-        let entry = CalendarEntryBuilder.live(weekCount: weekCount, calendarIds: configuration.selectedCalendarIds, showDeclined: configuration.showDeclinedEvents)
+        // Reuse the cache the sync just read back rather than decoding the same file again.
+        let entry = CalendarEntryBuilder.live(
+            weekCount: weekCount,
+            calendarIds: configuration.selectedCalendarIds,
+            showDeclined: configuration.showDeclinedEvents,
+            cache: refreshed
+        )
         // Data reloads are pushed by syncs/intents; this fallback reload lands at the next
         // midnight so the "today" marker and the week anchor advance right at the day/week
         // boundary (offset-0 window re-derives from the new date).

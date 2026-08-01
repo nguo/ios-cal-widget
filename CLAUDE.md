@@ -56,9 +56,17 @@ configuration — not globally. The cache is a superset; filtering happens at re
 Registered in `CalendarWidgetBundle.swift`.
 
 **`TwoWeekWidget`** (systemMedium) — `CalendarTimelineProvider` → `CalendarEntryBuilder` →
-`CalendarGridView` (`MonthHeaderView` + `WeekdayHeaderRow` + `WeekRowView`). Generic over
-`weekCount`. Paging via `ShiftWindowIntent`/`GoToTodayIntent`, offset in
+`CalendarGridView` (`MonthHeaderView` + `WeekdayHeaderRow` + `WeekRowView`). Window size is
+`AppConfig.gridWeekCount`. Paging via `ShiftWindowIntent`/`GoToTodayIntent`, offset in
 `AppGroupStore.twoWeekPageOffset`.
+
+Don't read that as "generic over week count". `DateWindow` is — it's pure math and tested at
+several sizes — but the plumbing around it isn't, and it used to *look* like it was while
+`ShiftWindowIntent` hardcoded a 2 of its own. The intents run in another process and aren't told
+which widget invoked them, and every grid instance shares one page offset, so a second grid of a
+different size would page against this one's windows. Adding one means giving the grid what
+`AgendaVariant` gives the agendas — a per-widget offset key and an intent parameter — so the
+single constant is what's honest until then.
 
 **`AgendaWidget`** (systemSmall) and **`AgendaMediumWidget`** (systemMedium) share one pipeline:
 
@@ -142,9 +150,11 @@ lockstep against mismatched boundaries.
   `ShiftWindowIntent` claims the flag *before* writing the new offset, to close that gap — via
   `claimSync()`, which re-checks, since the cache read between the entry guard and the claim is
   itself a window another process can start syncing in.
-- **Read the cache once per timeline build and pass it down** (`AgendaEntryBuilder.live(cache:)`).
-  The provider builds an entry per reload point; re-decoding the file for each is real memory
-  and CPU inside a jetsam-limited extension.
+- **Read the cache once per timeline build and pass it down** (both builders take `cache:`).
+  The agenda provider builds an entry per reload point; re-decoding the file for each is real
+  memory and CPU inside a jetsam-limited extension. The grid builds one entry, but still gets
+  the cache handed to it — `CoverageRefresh` returns the copy it read back after syncing, and
+  decoding the same bytes a second time to build from them is free to avoid.
 - **`CalendarEvent.id` does not identify an event — `cacheKey` (calendar + id) does.** It's
   Google's event id, unique only *within* a calendar, so the same meeting reachable through two
   calendars comes back once per calendar under one id. Two consequences, same root cause:

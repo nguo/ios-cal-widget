@@ -144,6 +144,23 @@ final class EventCacheTests: XCTestCase {
         XCTAssertEqual(merged.events.first { $0.calendarId == "personal" }?.title, "Standup")
     }
 
+    /// nil means "every calendar" (previews, gallery) and must never read as unconfigured.
+    func testNeedsConfigurationOnlyForAnEmptySelection() {
+        let s0 = TestSupport.date(2026, 3, 1, 0, calendar: cal)
+        let cache = EventCacheData(generatedAt: s0, windowStart: s0, windowEnd: s0, sources: [], events: [])
+
+        XCTAssertTrue(EventCacheData.needsConfiguration(calendarIds: [], cache: cache))
+        XCTAssertFalse(EventCacheData.needsConfiguration(calendarIds: nil, cache: cache))
+        XCTAssertFalse(EventCacheData.needsConfiguration(calendarIds: ["work"], cache: cache))
+    }
+
+    /// Before the first sync there are no calendars to choose from, so the widget has to show the
+    /// sign-in prompt rather than asking the user to configure something that doesn't exist yet.
+    func testNeedsConfigurationIsFalseBeforeAnySync() {
+        XCTAssertFalse(EventCacheData.needsConfiguration(calendarIds: [], cache: nil))
+        XCTAssertFalse(EventCacheData.needsConfiguration(calendarIds: nil, cache: nil))
+    }
+
     /// Duplicates that survive share a start date exactly, so start alone can't order them and
     /// dictionary iteration would vary between runs.
     func testAppendingOrdersTiedStartsDeterministically() {

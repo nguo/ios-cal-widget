@@ -26,7 +26,7 @@ struct ShiftWindowIntent: AppIntent {
 
         let newOffset = store.twoWeekPageOffset + direction
         let cal = Calendar.calWidget
-        let window = DateWindow(referenceDate: Date(), pageOffset: newOffset, weekCount: 2, calendar: cal)
+        let window = DateWindow(referenceDate: Date(), pageOffset: newOffset, weekCount: AppConfig.gridWeekCount, calendar: cal)
         let alreadyCached = EventCache(appGroupIdentifier: AppConfig.appGroupID)?
             .read()?.covers(start: window.startDate, end: window.endExclusive) ?? false
 
@@ -42,7 +42,7 @@ struct ShiftWindowIntent: AppIntent {
         WidgetReloader.reload(kind: AppConfig.twoWeekWidgetKind) // instant window change (+ spinner)
 
         if !alreadyCached {
-            await SyncCoordinator.fetchWindowIfNeeded(pageOffset: newOffset, weekCount: 2, calendar: cal)
+            await SyncCoordinator.fetchWindowIfNeeded(pageOffset: newOffset, weekCount: AppConfig.gridWeekCount, calendar: cal)
             store.endSync()
             WidgetReloader.reloadAll() // the fetch widened the cache — every widget re-reads it
         }

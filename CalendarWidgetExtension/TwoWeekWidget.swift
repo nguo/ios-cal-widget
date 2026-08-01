@@ -2,15 +2,16 @@ import WidgetKit
 import SwiftUI
 import CalCore
 
-/// The two-week widget. This is the ONLY week-count-specific declaration: it fixes
-/// `weekCount: 2` and the `.systemMedium` family, then delegates rendering to the generic
-/// `CalendarGridView`. A future OneWeekWidget/ThreeWeekWidget would mirror this file.
+/// The two-week widget: `AppConfig.gridWeekCount` weeks in the `.systemMedium` family,
+/// delegating rendering to `CalendarGridView`. The week count comes from `AppConfig` because the
+/// paging intents and the sync range need the same number and can't be handed it per instance —
+/// see that constant for what a differently-sized grid widget would actually require.
 struct TwoWeekWidget: Widget {
     var body: some WidgetConfiguration {
         AppIntentConfiguration(
             kind: AppConfig.twoWeekWidgetKind,
             intent: SelectCalendarsIntent.self,
-            provider: CalendarTimelineProvider(weekCount: 2)
+            provider: CalendarTimelineProvider(weekCount: AppConfig.gridWeekCount)
         ) { entry in
             CalendarGridView(entry: entry)
                 .containerBackground(.black, for: .widget)

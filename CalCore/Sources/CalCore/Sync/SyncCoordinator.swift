@@ -76,7 +76,7 @@ public enum SyncCoordinator {
     /// show the in-flight state, which is only readable once the flag is set.
     @discardableResult
     public static func refreshCanonical(
-        weekCount: Int = 2,
+        weekCount: Int = AppConfig.gridWeekCount,
         calendar: Calendar,
         now: Date = Date(),
         onClaim: () -> Void = {}
