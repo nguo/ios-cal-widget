@@ -94,7 +94,8 @@ public struct CalendarSyncService {
                     timeMax: rangeEnd
                 )
                 return page.events.compactMap { gcal in
-                    try? CalendarEvent.from(gcal, calendarId: source.id, colorHex: source.colorHex, calendar: calendar)
+                    try? CalendarEvent.from(gcal, calendarId: source.id, colorHex: source.colorHex,
+                                            calendar: calendar, isFreeBusyOnly: source.isFreeBusyOnly)
                 }
             } catch {
                 guard attempt < backoff.count, Self.isRateLimited(error) else { return nil }

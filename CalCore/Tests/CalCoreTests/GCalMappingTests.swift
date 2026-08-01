@@ -67,6 +67,59 @@ final class GCalMappingTests: XCTestCase {
         XCTAssertNil(try CalendarEvent.from(g, calendarId: "cal1", colorHex: "#000", calendar: cal))
     }
 
+    /// A calendar shared as free/busy returns every event with no `summary`. "(No title)" would
+    /// read as "nobody named it" when the truth is "you may not see the name".
+    func testFreeBusyOnlyEventsAreTitledBusy() throws {
+        let g = GCalEvent(
+            id: "fb1", summary: nil,
+            start: GCalEventDateTime(date: nil, dateTime: "2026-07-15T17:30:00-07:00", timeZone: nil),
+            end: GCalEventDateTime(date: nil, dateTime: "2026-07-15T18:00:00-07:00", timeZone: nil),
+            status: "confirmed", htmlLink: nil, attendees: nil
+        )
+        let busy = try XCTUnwrap(try CalendarEvent.from(g, calendarId: "shared", colorHex: "#000",
+                                                        calendar: cal, isFreeBusyOnly: true))
+        XCTAssertEqual(busy.title, "Busy")
+
+        // Same payload on a calendar you can actually read is a genuinely untitled event.
+        let untitled = try XCTUnwrap(try CalendarEvent.from(g, calendarId: "mine", colorHex: "#000",
+                                                             calendar: cal, isFreeBusyOnly: false))
+        XCTAssertEqual(untitled.title, "(No title)")
+    }
+
+    /// A free/busy calendar that *does* send a title (Google varies by sharing setting) must keep
+    /// it — the fallback is a fallback, not an override.
+    func testFreeBusyOnlyKeepsARealTitleWhenPresent() throws {
+        let g = GCalEvent(
+            id: "fb2", summary: "Standup",
+            start: GCalEventDateTime(date: nil, dateTime: "2026-07-15T17:30:00-07:00", timeZone: nil),
+            end: GCalEventDateTime(date: nil, dateTime: "2026-07-15T18:00:00-07:00", timeZone: nil),
+            status: "confirmed", htmlLink: nil, attendees: nil
+        )
+        let e = try XCTUnwrap(try CalendarEvent.from(g, calendarId: "shared", colorHex: "#000",
+                                                      calendar: cal, isFreeBusyOnly: true))
+        XCTAssertEqual(e.title, "Standup")
+    }
+
+    /// `accessRole` drives the flag, and only that one value means free/busy.
+    func testAccessRoleMapsToFreeBusyFlag() throws {
+        func entry(_ role: String?) -> GCalCalendarListEntry {
+            GCalCalendarListEntry(id: "c", summary: "C", backgroundColor: nil, primary: nil, accessRole: role)
+        }
+        XCTAssertTrue(entry("freeBusyReader").isFreeBusyOnly)
+        XCTAssertFalse(entry("reader").isFreeBusyOnly)
+        XCTAssertFalse(entry("owner").isFreeBusyOnly)
+        XCTAssertFalse(entry(nil).isFreeBusyOnly, "a response without the field must not read as free/busy")
+    }
+
+    /// Caches written before `isFreeBusyOnly` existed must still decode.
+    func testCalendarSourceDecodesWithoutTheFreeBusyField() throws {
+        // Double-hash delimiter: the color's "#" would otherwise close a #"..."# raw string.
+        let json = ##"{"id":"c1","accountEmail":"a@b.com","summary":"Work","colorHex":"#fff"}"##
+        let source = try JSONDecoder().decode(CalendarSource.self, from: Data(json.utf8))
+        XCTAssertFalse(source.isFreeBusyOnly)
+        XCTAssertEqual(source.summary, "Work")
+    }
+
     func testDeclinedBySelfAttendee() throws {
         let start = GCalEventDateTime(date: nil, dateTime: "2026-07-15T17:30:00-07:00", timeZone: nil)
         let end = GCalEventDateTime(date: nil, dateTime: "2026-07-15T18:00:00-07:00", timeZone: nil)

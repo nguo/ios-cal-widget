@@ -13,11 +13,18 @@ public struct GoogleCalendarAPIClient {
     }
 
     /// The user's calendar list (for the picker), including each calendar's color.
+    ///
+    /// `minAccessRole` is `freeBusyReader`, the lowest real role, so calendars shared with you as
+    /// "see only free/busy" are included. It used to be `reader`, which sits one rung *above*
+    /// `freeBusyReader` in Google's ordering — those calendars were dropped by the server before
+    /// we ever saw them, so they never reached the picker and there was nothing in the app to
+    /// suggest why. Their events come back with no `summary`; `CalendarSource.isFreeBusyOnly`
+    /// carries that fact to the mapper, which titles them "Busy".
     public func calendarList(accessToken: String) async throws -> [GCalCalendarListEntry] {
         var entries: [GCalCalendarListEntry] = []
         var pageToken: String?
         repeat {
-            var items = [URLQueryItem(name: "minAccessRole", value: "reader")]
+            var items = [URLQueryItem(name: "minAccessRole", value: "freeBusyReader")]
             if let pageToken { items.append(URLQueryItem(name: "pageToken", value: pageToken)) }
             let url = try Self.makeURL(encodedPath: "/users/me/calendarList", query: items)
             let resp: GCalCalendarListResponse = try await get(url, accessToken: accessToken)

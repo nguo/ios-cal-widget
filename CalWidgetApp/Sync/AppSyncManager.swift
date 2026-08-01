@@ -32,7 +32,8 @@ final class AppSyncManager: ObservableObject {
                     id: entry.id,
                     accountEmail: email,
                     summary: entry.summary ?? entry.id,
-                    colorHex: entry.backgroundColor ?? "#4285F4"
+                    colorHex: entry.backgroundColor ?? "#4285F4",
+                    isFreeBusyOnly: entry.isFreeBusyOnly
                 )
             }
             // First run has no cache, and the widget's calendar picker (and every widget) reads

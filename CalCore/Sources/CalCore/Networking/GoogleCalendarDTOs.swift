@@ -15,6 +15,13 @@ public struct GCalCalendarListEntry: Codable, Sendable {
     public let summary: String?
     public let backgroundColor: String?
     public let primary: Bool?
+    /// The signed-in user's access to this calendar: "freeBusyReader" | "reader" | "writer" |
+    /// "owner". Only `freeBusyReader` matters to us — those calendars return events stripped of
+    /// every detail including the title, so they have to be rendered as plain busy blocks.
+    public let accessRole: String?
+
+    /// Google's own value for "you can see that something is scheduled, but nothing about it".
+    public var isFreeBusyOnly: Bool { accessRole == "freeBusyReader" }
 }
 
 // MARK: - events.list
@@ -80,7 +87,8 @@ public extension CalendarEvent {
         _ gcal: GCalEvent,
         calendarId: String,
         colorHex: String,
-        calendar: Calendar
+        calendar: Calendar,
+        isFreeBusyOnly: Bool = false
     ) throws -> CalendarEvent? {
         if gcal.status == "cancelled" { return nil }
         guard let start = gcal.start, let end = gcal.end else {
@@ -116,10 +124,14 @@ public extension CalendarEvent {
             $0.selfAttendee == true && $0.responseStatus == "declined"
         } ?? false
 
+        // A free/busy calendar strips the title from every event, so "(No title)" would be a
+        // misreading — the event has a name, we're just not allowed to see it.
+        let fallbackTitle = isFreeBusyOnly ? "Busy" : "(No title)"
+
         return CalendarEvent(
             id: gcal.id,
             calendarId: calendarId,
-            title: gcal.summary ?? "(No title)",
+            title: gcal.summary ?? fallbackTitle,
             startDate: startDate,
             endDate: endDate,
             isAllDay: allDay,
