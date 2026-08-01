@@ -21,7 +21,7 @@ public enum SyncOutcome: Equatable, Sendable {
 /// the widget extension too. All writes are atomic (`EventCache.write`).
 public enum SyncCoordinator {
     /// The rolling canonical window: today .. `agendaHorizonDays` after. Kept intentionally small —
-    /// paging backfills anything beyond it on demand (see `fetchRangeIfNeeded`).
+    /// paging backfills anything beyond it on demand (see `fetchWindowIfNeeded`).
     ///
     /// The end is *derived* from the agenda's horizon rather than hardcoded to match it. The agenda
     /// asks for exactly `today … today + agendaHorizonDays` and nothing tells it when the cache
@@ -38,10 +38,10 @@ public enum SyncCoordinator {
 
     /// The canonical range, widened so it also fully covers the widget window at `pageOffset`.
     /// The grid widget's window is week-aligned, so even at offset 0 it starts on the current
-    /// week's Sunday — before `today` on any non-Sunday — and thus falls outside the canonical
-    /// `today … +2wk` range. Paged offsets fall outside too. Without this widening a canonical
-    /// sync leaves that window uncovered, so the widget shows the "tap to refresh" banner even
-    /// though fresh events are visible.
+    /// week's Sunday — before `today` on any non-Sunday — and so falls outside the canonical
+    /// range, which starts at today. Paged offsets fall outside too. Without this widening a
+    /// canonical sync leaves that window uncovered, so the widget shows the "tap to refresh"
+    /// banner even though fresh events are visible.
     public static func canonicalRange(
         coveringOffset pageOffset: Int,
         weekCount: Int,
@@ -55,7 +55,7 @@ public enum SyncCoordinator {
         return (start, end)
     }
 
-    /// Rebuilds the canonical today/+2wk window fresh and replaces the cache with exactly it
+    /// Rebuilds the canonical window fresh and replaces the cache with exactly it
     /// (discarding any ranges pagination had appended beyond), widened to still cover the
     /// widget's currently-paged window so a paged widget isn't stranded on the stale banner.
     /// Leaves any existing cache untouched unless the fetch fully succeeds.

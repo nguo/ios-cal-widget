@@ -1,7 +1,8 @@
 # CalWidgetApp
 
-iOS Google Calendar widgets: a two-week grid and two paginating agendas. The app signs in and
-syncs; the widget extension only renders from a shared cache.
+iOS Google Calendar widgets: a two-week grid and two paginating agendas. The app owns sign-in;
+everything renders from a shared cache, which the app syncs and — on three specific paths — the
+widget extension does too (see Data flow).
 
 **Vocabulary:** the widgets *paginate* — they never scroll. WidgetKit has no scroll view; a page
 turn is an App Intent that changes a stored offset and reloads the timeline. Reserve "scroll"
@@ -36,7 +37,7 @@ UI's numbers — `WeekLayout` takes `maxRowsPerCell`, `AgendaPagination` takes `
 
 ## Data flow
 
-Sync is one-way and the widget never networks:
+Sync is one-way — everything flows cache-ward, and nothing reads back up the chain:
 
 ```
 GoogleCalendarAPIClient → CalendarSyncService (map + merge, color denormalized)
@@ -45,8 +46,18 @@ GoogleCalendarAPIClient → CalendarSyncService (map + merge, color denormalized
 
 `SyncCoordinator` is the canonical sync — it reads the refresh token from the shared Keychain
 and needs no GoogleSignIn SDK, so it runs in the extension too. Triggered by `AppRefresh`
-(app foreground/background) and `RefreshNowIntent` (widget). Cross-process scratch state
-(pagination offsets, pending deep link, sync flag) lives in `AppGroupStore`.
+(app foreground/background), `RefreshNowIntent` and `ShiftWindowIntent` (widget), and
+`CoverageRefresh` (either timeline provider, when the reload lands on a window the cache no
+longer covers). Cross-process scratch state (pagination offsets, pending deep link, sync flag)
+lives in `AppGroupStore`.
+
+**The widget extension does network, on those three paths only.** It's a real constraint worth
+stating precisely rather than as "widgets only read the cache", which is what this said while
+three networking paths existed. *Rendering* never networks: an entry is built from the cache and
+nothing else. What networks is a paging tap into an uncached window, the refresh button, and the
+coverage check that runs before a build — the last gated on `covers()` being false, so an
+ordinary reload still costs nothing. All three go through `SyncCoordinator` and hold the shared
+sync flag while they run, so they can't stack up on each other or on the app's syncs.
 
 Calendar *selection* is per placed widget instance, stored in its `SelectCalendarsIntent`
 configuration — not globally. The cache is a superset; filtering happens at render.
@@ -137,8 +148,10 @@ lockstep against mismatched boundaries.
   moves to a new Sunday the cache can't cover. Both providers call
   `CoverageRefresh.syncIfUncovered` before building, which is the **only** networking in the
   render path — it is gated on `covers()` being false, so a covered reload still costs nothing.
-  The `isSyncing` claim inside it matters: all three widgets wake on the same midnight tick and
-  would otherwise each fetch the same range.
+  The sync claim matters here: all three widgets wake on the same midnight tick and would
+  otherwise each fetch the same range. `refreshCanonical` holds that claim, so the first widget
+  to arrive does the work and the others get `.skipped`, render from disk, and pick up the
+  result from its reload.
 - **No spinners in a widget — say it in words.** A widget is a static snapshot; WidgetKit never
   animates it, so a `ProgressView` renders as an inert ring (and tinting flattened the one we
   had into a pale blob). In-progress state goes in `CalendarGridView`'s `banner`, which shows
@@ -173,7 +186,11 @@ lockstep against mismatched boundaries.
   the same cache, so a per-kind reload silently strands the others on stale data — which is
   exactly what happened when background/foreground/manual refresh each named only the grid.
   `WidgetReloader.reload(kind:)` is only for state that provably affects one widget (a paging
-  offset, its own spinner).
+  offset, its own spinner). Note this means `CoverageRefresh` also reloads the very provider
+  that called it, costing one redundant rebuild — that has been weighed and kept. Excluding the
+  caller needs an enumerable list of widget kinds, and a list that falls behind a newly added
+  widget strands it on stale data, which is a worse failure than a rebuild that happens at most
+  once per rollover and can't loop (the retriggered build finds `covers()` true).
 - **A total sync failure must not be written.** `CalendarSyncService.buildCache` returns nil
   when *every* calendar fails; callers skip the write so the last good cache survives. Writing
   the empty result blanked the widget while leaving it looking freshly synced. A partial
@@ -192,7 +209,8 @@ lockstep against mismatched boundaries.
   range from `canonicalRange(coveringOffset:)` unmodified. No sync's range may be a function of
   what is currently cached — that is the whole property, and it is why nothing needs pruning.
 - **That one range must satisfy both widgets, which want different windows.** The grid is
-  week-aligned (most-recent Sunday … +2wk); the agenda is today … +`agendaHorizonDays`.
+  week-aligned (most-recent Sunday … +`gridWeekCount` weeks); the agenda is
+  today … +`agendaHorizonDays`.
   `canonicalRange(coveringOffset:)` spans the union — it starts at the *Sunday* (not today) and
   ends at whichever reaches further. The agenda's far edge lands exactly on `windowEnd` with zero
   slack, which is why `canonicalRange` **derives** its end from `AppConfig.agendaHorizonDays`
@@ -253,6 +271,20 @@ xcodebuild -project CalWidgetApp.xcodeproj -scheme CalWidgetApp \
 cd CalCore && swift test          # XCTest suite
 cd CalCore && swift run calcore-check   # assertion harness, no XCTest needed
 ```
+
+**If `xcode-select -p` returns `/Library/Developer/CommandLineTools` rather than an Xcode path
+— it does on the machine this was written on — the first two commands fail**: `xcodebuild` with
+"requires Xcode", `swift test` with "no such module 'XCTest'". Export the toolchain instead of
+`sudo xcode-select --switch`, which changes a system-wide setting:
+
+```
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+```
+
+`calcore-check` is the exception and runs fine on the stock toolchain — being able to check the
+logic with no Xcode at all is the reason it exists, so reach for it first. Set `DEVELOPER_DIR`
+consistently across a session once you do need it: mixing toolchains poisons `CalCore/.build`
+("module compiled with Swift 6.3.3 cannot be imported by the Swift 6.1.2 compiler").
 
 Agenda paging math is `AgendaPagination` in CalCore and is covered by `AgendaPaginationTests`
 plus `calcore-check`, so change it test-first. What those tests *cannot* see is whether
