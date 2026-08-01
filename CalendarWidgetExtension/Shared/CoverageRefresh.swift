@@ -22,25 +22,18 @@ enum CoverageRefresh {
         calendar: Calendar = .calWidget,
         now: Date = Date()
     ) async -> EventCacheData? {
-        guard
-            let store = AppGroupStore(suiteName: AppConfig.appGroupID),
-            let file = EventCache(appGroupIdentifier: AppConfig.appGroupID)
-        else { return nil }
+        guard let file = EventCache(appGroupIdentifier: AppConfig.appGroupID) else { return nil }
 
         // Nothing on disk yet is the un-synced/signed-out case, not a stale one. `refreshCanonical`
         // would bail anyway (it reads the selected calendars *from* the cache), so don't spend the
-        // flag or the launch on it.
+        // launch on it.
         guard let existing = file.read() else { return nil }
         guard !existing.covers(start: start, end: end) else { return nil }
 
         // All three widgets reload on the same midnight tick and would each fire their own fetch of
-        // the same range. First one to claim the flag does the work; the others render from disk and
-        // pick up the result via the reload below.
-        guard !store.isSyncing else { return nil }
-        store.beginSync()
-        defer { store.endSync() }
-
-        guard await SyncCoordinator.refreshCanonical(calendar: calendar, now: now) else { return nil }
+        // the same range. `refreshCanonical` claims the shared flag, so the first one does the work
+        // and the rest return `.skipped`, render from disk, and pick up the result via its reload.
+        guard await SyncCoordinator.refreshCanonical(calendar: calendar, now: now) == .succeeded else { return nil }
         // Re-check coverage rather than assuming: if a sync somehow still can't cover this range,
         // returning nil here stops the reload, and with it any chance of a reload/sync loop.
         guard let fresh = file.read(), fresh.covers(start: start, end: end) else { return nil }

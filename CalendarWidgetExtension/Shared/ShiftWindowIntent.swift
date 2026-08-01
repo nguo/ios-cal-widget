@@ -31,10 +31,12 @@ struct ShiftWindowIntent: AppIntent {
             .read()?.covers(start: window.startDate, end: window.endExclusive) ?? false
 
         // Claim the in-flight flag *before* publishing the new offset, so a second tap arriving
-        // in between is rejected by the guard above rather than paging again. A cached range
-        // needs no flag — there's nothing to wait for, and flagging it would flicker the
-        // controls disabled for one frame on an instant page turn.
-        if !alreadyCached { store.beginSync() }
+        // in between is rejected rather than paging again. Re-checked here via `claimSync` rather
+        // than trusting the guard above, since the cache read between them is a window in which
+        // another process could have started syncing. A cached range needs no flag — there's
+        // nothing to wait for, and flagging it would flicker the controls disabled for one frame
+        // on an instant page turn.
+        if !alreadyCached, !store.claimSync() { return .result() }
         store.twoWeekPageOffset = newOffset
         // Page offset + spinner are grid-only state, so this one is a grid-only reload.
         WidgetReloader.reload(kind: AppConfig.twoWeekWidgetKind) // instant window change (+ spinner)

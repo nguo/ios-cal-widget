@@ -1,5 +1,20 @@
 import Foundation
 
+/// What a sync attempt did. `skipped` is distinct from `failed` on purpose: a skipped sync never
+/// claimed the flag and never touched the in-flight state, so callers that reload widgets to
+/// clear a spinner must not treat it as a finished sync — whoever holds the flag will reload.
+public enum SyncOutcome: Equatable, Sendable {
+    /// Another sync was already in flight; this one did nothing.
+    case skipped
+    /// Ran and replaced the cache.
+    case succeeded
+    /// Ran (or couldn't start for lack of credentials) and left the cache untouched.
+    case failed
+
+    /// Whether this attempt actually held the flag, i.e. the in-flight state changed.
+    public var ran: Bool { self != .skipped }
+}
+
 /// Credential-driven sync used by the widget's refresh intent, the pagination intent, and the
 /// app's background/foreground refresh. Reads the refresh token from the shared Keychain and
 /// the selected calendars from the existing cache — no GoogleSignIn SDK needed, so it runs in
@@ -43,30 +58,53 @@ public enum SyncCoordinator {
     /// Rebuilds the canonical today/+2wk window fresh and replaces the cache with exactly it
     /// (discarding any ranges pagination had appended beyond), widened to still cover the
     /// widget's currently-paged window so a paged widget isn't stranded on the stale banner.
-    /// Returns false if not signed in / no selected calendars — leaving any existing cache
-    /// untouched.
+    /// Leaves any existing cache untouched unless the fetch fully succeeds.
     ///
     /// Replacing rather than merging is what keeps the cache bounded: every sync entry point
     /// lands here, so the file is always exactly one canonical range and nothing accumulates.
     /// Pagination is the one writer that merges (`fetchWindowIfNeeded`), and the next sync
     /// reclaims whatever it added.
+    ///
+    /// Claims the shared cross-process sync flag itself and returns `.skipped` when another sync
+    /// already holds it. The guard lives here rather than at each call site because this replaces
+    /// the whole cache: two overlapping syncs mean the loser's write is silently discarded, and
+    /// when the loser is a pagination fetch the widget lands on the page it just navigated to with
+    /// no events. Guarding at the call sites left the app's foreground and background refreshes
+    /// unguarded in both directions.
+    ///
+    /// `onClaim` runs after the flag is claimed and before the fetch — for callers that need to
+    /// show the in-flight state, which is only readable once the flag is set.
     @discardableResult
-    public static func refreshCanonical(weekCount: Int = 2, calendar: Calendar, now: Date = Date()) async -> Bool {
-        guard let ctx = context() else { return false }
+    public static func refreshCanonical(
+        weekCount: Int = 2,
+        calendar: Calendar,
+        now: Date = Date(),
+        onClaim: () -> Void = {}
+    ) async -> SyncOutcome {
+        guard let ctx = context() else { return .failed }
+        // Claim after `context()`: a signed-out process can't sync, so it shouldn't spend the flag.
+        guard ctx.store.claimSync(now: now) else { return .skipped }
+        defer { ctx.store.endSync() }
+        onClaim()
+
         let range = canonicalRange(coveringOffset: ctx.store.twoWeekPageOffset, weekCount: weekCount, calendar: calendar, now: now)
         do {
             let cache = try await fetch(ctx: ctx, calendar: calendar, start: range.start, end: range.end, now: now)
             try EventCache(appGroupIdentifier: AppConfig.appGroupID)?.write(cache)
             ctx.store.lastSyncedAt = now
-            return true
+            return .succeeded
         } catch {
-            return false
+            return .failed
         }
     }
 
     /// If the window for `pageOffset` isn't fully covered by the cache, fetches just that range
     /// and appends it (widening the cached window). Used to auto-load unfetched ranges when the
     /// user paginates. No-ops (returns true) when the range is already cached.
+    ///
+    /// Unlike `refreshCanonical`, the **caller** owns the sync claim here: `ShiftWindowIntent`
+    /// must hold it from before it publishes the new page offset until after this returns, so a
+    /// second tap can't page ahead of the fetch. Claiming internally would leave that gap open.
     @discardableResult
     public static func fetchWindowIfNeeded(
         pageOffset: Int,

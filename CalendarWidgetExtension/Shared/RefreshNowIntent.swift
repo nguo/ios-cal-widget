@@ -11,19 +11,18 @@ struct RefreshNowIntent: AppIntent {
     static var isDiscoverable: Bool = false
 
     func perform() async throws -> some IntentResult {
-        guard let store = AppGroupStore(suiteName: AppConfig.appGroupID) else { return .result() }
-        guard !store.isSyncing else { return .result() } // double-tap / concurrent guard
-
-        store.beginSync()
-        // Only the grid renders the in-flight state, so dimming is a grid-only reload.
-        WidgetReloader.reload(kind: AppConfig.twoWeekWidgetKind)
-        defer {
-            store.endSync()
+        // `refreshCanonical` owns the double-tap / concurrent guard: it claims the shared flag and
+        // returns `.skipped` if a sync is already running.
+        let outcome = await SyncCoordinator.refreshCanonical(calendar: .calWidget) {
+            // Runs once the flag is claimed, so the rebuilt entry reads it as in-flight. Only the
+            // grid renders that state, so dimming is a grid-only reload.
+            WidgetReloader.reload(kind: AppConfig.twoWeekWidgetKind)
+        }
+        // Reload only when this call actually held the flag — it dimmed the button and must undim
+        // it. On `.skipped` the sync that does hold it reloads when it finishes.
+        if outcome.ran {
             WidgetReloader.reloadAll() // the cache may have changed — every widget re-reads it
         }
-
-        let cal = Calendar.calWidget
-        await SyncCoordinator.refreshCanonical(calendar: cal)
         return .result()
     }
 }

@@ -57,8 +57,9 @@ public struct AppGroupStore {
     /// How long a sync may be in flight before its flag is assumed abandoned.
     public static let syncFlagTimeout: TimeInterval = 90
 
-    /// When the in-flight sync started, or nil if none. Prefer `isSyncing` for reads;
-    /// use `beginSync()` / `endSync()` for writes.
+    /// When the in-flight sync started, or nil if none. Prefer `isSyncing` for reads; to start a
+    /// sync use `claimSync()` / `endSync()`. `beginSync()` claims unconditionally — it's the
+    /// primitive behind `claimSync`, not the way to begin a sync.
     public var syncStartedAt: Date? {
         get { defaults.object(forKey: Key.syncStartedAt) as? Date }
         nonmutating set { defaults.set(newValue, forKey: Key.syncStartedAt) }
@@ -80,6 +81,16 @@ public struct AppGroupStore {
     public func beginSync(now: Date = Date()) { syncStartedAt = now }
 
     public func endSync() { syncStartedAt = nil }
+
+    /// Claims the in-flight flag, or returns false if a sync is already running. The check and
+    /// the claim are one call so every sync entry point guards identically — spelling the pair
+    /// out by hand is how the app's foreground/background refresh ended up not guarding at all,
+    /// letting a canonical rebuild land on top of a widget's paged fetch and drop it.
+    public func claimSync(now: Date = Date()) -> Bool {
+        guard !isSyncing else { return false }
+        beginSync(now: now)
+        return true
+    }
 
     public var lastSyncedAt: Date? {
         get { defaults.object(forKey: Key.lastSyncedAt) as? Date }

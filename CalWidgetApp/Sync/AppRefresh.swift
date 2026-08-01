@@ -3,15 +3,20 @@ import BackgroundTasks
 import CalCore
 
 /// Background + foreground refresh helpers for the app. Both delegate to `SyncCoordinator`
-/// (a `today … +14d` canonical rebuild via the shared-Keychain refresh token) and reload
-/// every widget.
+/// (a canonical rebuild via the shared-Keychain refresh token) and reload every widget.
+///
+/// Both are subject to `refreshCanonical`'s cross-process claim, so neither can start behind a
+/// widget intent's sync — these fire on a schedule the user doesn't see, so an unguarded one
+/// could replace the cache underneath a pagination fetch the user had just triggered.
 enum AppRefresh {
     private static var calendar: Calendar { .calWidget }
 
     /// Runs a canonical sync and reloads every widget. Used by the BGTask handler.
     static func runBackgroundRefresh() async {
-        await SyncCoordinator.refreshCanonical(calendar: calendar)
-        WidgetReloader.reloadAll()
+        // A skipped sync changed nothing, so there's nothing for the widgets to re-read.
+        if await SyncCoordinator.refreshCanonical(calendar: calendar).ran {
+            WidgetReloader.reloadAll()
+        }
         schedule()
     }
 
@@ -22,8 +27,9 @@ enum AppRefresh {
            Date().timeIntervalSince(last) < maxAge {
             return
         }
-        await SyncCoordinator.refreshCanonical(calendar: calendar)
-        WidgetReloader.reloadAll()
+        if await SyncCoordinator.refreshCanonical(calendar: calendar).ran {
+            WidgetReloader.reloadAll()
+        }
     }
 
     /// Schedules the next background refresh (~1h out; the OS decides actual timing).

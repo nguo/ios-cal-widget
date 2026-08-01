@@ -47,20 +47,30 @@ final class AppSyncManager: ObservableObject {
         }
     }
 
-    /// Flips both in-flight flags together — the only place either is written, so they can't
-    /// drift apart.
+    /// Claims both in-flight flags together, or returns false when another process is already
+    /// syncing. Paired with `endSyncing` — the only two places either flag is written, so they
+    /// can't drift apart.
     ///
     /// They are genuinely two flags, not one duplicated. `isSyncing` is `@Published` because
     /// SwiftUI needs a publisher to re-render the disabled button and spinner, and it tracks
     /// this process exactly (`defer` guarantees the clear). The App Group flag is cross-process
-    /// mutual exclusion — it's what stops the widget's `RefreshNowIntent` starting a second sync
-    /// behind this one — and it self-expires after `syncFlagTimeout`, since a remote process can
+    /// mutual exclusion, and it self-expires after `syncFlagTimeout`, since a remote process can
     /// die without ever clearing it. That expiry is deliberately *not* applied to the local flag:
     /// a sync legitimately running past the timeout would otherwise drop the app's spinner while
     /// the work was still going.
-    private func setSyncing(_ active: Bool, store: AppGroupStore?) {
-        isSyncing = active
-        if active { store?.beginSync() } else { store?.endSync() }
+    ///
+    /// The claim has to be *checked*, not just set: this path writes the whole cache from its own
+    /// fetch rather than going through `refreshCanonical`, so starting behind a widget's sync
+    /// would clobber it. A missing App Group suite degrades to the local flag alone.
+    private func beginSyncing(store: AppGroupStore?) -> Bool {
+        guard store?.claimSync() ?? true else { return false }
+        isSyncing = true
+        return true
+    }
+
+    private func endSyncing(store: AppGroupStore?) {
+        isSyncing = false
+        store?.endSync()
     }
 
     /// Fetch across every calendar and write the cache. Covers the canonical today/+2wk
@@ -73,8 +83,11 @@ final class AppSyncManager: ObservableObject {
             return
         }
         let store = AppGroupStore(suiteName: AppConfig.appGroupID)
-        setSyncing(true, store: store)
-        defer { setSyncing(false, store: store) }
+        guard beginSyncing(store: store) else {
+            status = "A sync is already in progress."
+            return
+        }
+        defer { endSyncing(store: store) }
         do {
             let token = try await auth.accessToken()
             let service = CalendarSyncService(api: api, calendar: calendar)

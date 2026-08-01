@@ -45,6 +45,31 @@ final class AppGroupStoreTests: XCTestCase {
         store.beginSync(now: Date().addingTimeInterval(-(AppGroupStore.syncFlagTimeout / 2)))
         XCTAssertTrue(store.isSyncing)
     }
+
+    /// The second claimant must lose. Every sync entry point replaces the whole cache, so two
+    /// running at once means one write is silently discarded.
+    func testClaimSyncIsExclusive() {
+        let store = AppGroupStore(defaults: defaults)
+        XCTAssertTrue(store.claimSync())
+        XCTAssertFalse(AppGroupStore(defaults: defaults).claimSync())
+    }
+
+    /// Releasing hands the claim to the next caller — otherwise one sync would lock out all
+    /// later ones until the timeout.
+    func testClaimSyncSucceedsAfterRelease() {
+        let store = AppGroupStore(defaults: defaults)
+        XCTAssertTrue(store.claimSync())
+        store.endSync()
+        XCTAssertTrue(AppGroupStore(defaults: defaults).claimSync())
+    }
+
+    /// A claim abandoned by a killed process expires like any other, so the same recovery that
+    /// saves `isSyncing` saves the claim.
+    func testClaimSyncSucceedsOverStaleClaim() {
+        let store = AppGroupStore(defaults: defaults)
+        store.beginSync(now: Date().addingTimeInterval(-(AppGroupStore.syncFlagTimeout + 1)))
+        XCTAssertTrue(store.claimSync())
+    }
 }
 
 final class TokenRefreshTests: XCTestCase {

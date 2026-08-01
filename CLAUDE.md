@@ -139,7 +139,9 @@ lockstep against mismatched boundaries.
 - **Paging intents must guard on `isSyncing` themselves**, not rely on the dimmed controls.
   The disabled state only reaches the screen once WidgetKit delivers the reloaded timeline, so
   taps landing before then each advanced the offset and ran ahead of the in-flight fetch.
-  `ShiftWindowIntent` claims the flag *before* writing the new offset, to close that gap.
+  `ShiftWindowIntent` claims the flag *before* writing the new offset, to close that gap — via
+  `claimSync()`, which re-checks, since the cache read between the entry guard and the claim is
+  itself a window another process can start syncing in.
 - **Read the cache once per timeline build and pass it down** (`AgendaEntryBuilder.live(cache:)`).
   The provider builds an entry per reload point; re-decoding the file for each is real memory
   and CPU inside a jetsam-limited extension.
@@ -191,7 +193,20 @@ lockstep against mismatched boundaries.
 - **The sync flag is a timestamp, not a Bool.** `AppGroupStore.isSyncing` derives from
   `syncStartedAt` and expires after `syncFlagTimeout`. An App Intent killed mid-sync never
   clears a plain flag, which then persists across launches and permanently dims the refresh
-  button. Use `beginSync()` / `endSync()`.
+  button. Claim it with `claimSync()` / `endSync()`; `beginSync()` is the unconditional
+  primitive underneath and is not how you start a sync.
+- **`refreshCanonical` claims the sync flag itself — don't guard it at the call site.** It
+  returns `.skipped` when another sync holds the claim. The guard sits inside because that
+  function *replaces* the whole cache, so two overlapping syncs mean the loser's write is
+  silently discarded — and when the loser is `ShiftWindowIntent`'s pagination fetch, the widget
+  lands on the page the user just navigated to with no events on it. Guarding per-call-site is
+  what left `AppRefresh`'s foreground and background syncs unguarded in both directions.
+  Callers that reload widgets to clear a spinner must check `.ran`, not just success: a
+  `.skipped` call never touched the in-flight state, and whoever holds the claim will reload.
+  Two paths still claim externally, both deliberately: `ShiftWindowIntent` (it must hold the
+  claim from before it publishes the new offset until after `fetchWindowIfNeeded` returns) and
+  `AppSyncManager.syncNow` (it fetches with the app's own signed-in sources rather than going
+  through `refreshCanonical`).
 - **Deep links are gated by `DeepLinkBuilder.isTrustedGoogleHost`.** `hasSuffix("google.com")`
   also matches `evilgoogle.com`. Both the `onOpenURL` router and the pending-link forwarder
   validate; the forwarder clears the stashed link *before* validating so a rejected one can't
