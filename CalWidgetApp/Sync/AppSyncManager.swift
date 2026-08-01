@@ -73,9 +73,14 @@ final class AppSyncManager: ObservableObject {
         store?.endSync()
     }
 
-    /// Fetch across every calendar and write the cache. Covers the canonical today/+2wk
-    /// window, the widget's currently-paged window, and any wider range pagination had already
-    /// fetched — so an app-initiated sync never strands a paged widget on the stale banner.
+    /// Fetch across every calendar and replace the cache with exactly the canonical range,
+    /// widened to cover the widget's currently-paged window so an app-initiated sync never
+    /// strands a paged widget on the stale banner.
+    ///
+    /// Keeps its own fetch rather than calling `SyncCoordinator.refreshCanonical`: this runs with
+    /// the GoogleSignIn access token and the freshly-listed `sources`, which on first run include
+    /// calendars the cache doesn't have yet — and `refreshCanonical` derives what to fetch *from*
+    /// the cache, so it can't seed one.
     func syncNow() async {
         guard let auth else { return }
         guard EventCache(appGroupIdentifier: AppConfig.appGroupID) != nil else {
@@ -92,7 +97,17 @@ final class AppSyncManager: ObservableObject {
             let token = try await auth.accessToken()
             let service = CalendarSyncService(api: api, calendar: calendar)
             let now = Date()
-            let (start, end) = syncRange(now: now)
+            // Exactly one canonical range, same as every other sync entry point. Deliberately not
+            // unioned with the currently-cached window: that grew the refetch every time, since
+            // each sync widened the window the next one would union against. Ranges pagination had
+            // added and since navigated away from are dropped here and refetched on demand by
+            // `fetchWindowIfNeeded` if the user pages back.
+            let (start, end) = SyncCoordinator.canonicalRange(
+                coveringOffset: store?.twoWeekPageOffset ?? 0,
+                weekCount: 2,
+                calendar: calendar,
+                now: now
+            )
 
             // nil ⇒ every calendar failed. Skip the write so the last good cache survives;
             // overwriting it with an empty result would blank the widgets while still looking
@@ -116,17 +131,4 @@ final class AppSyncManager: ObservableObject {
         }
     }
 
-    /// Range to fetch: canonical, widened to cover the widget's currently-paged window and
-    /// whatever breadth pagination had already cached (so a selection change refetches all of it).
-    private func syncRange(now: Date) -> (start: Date, end: Date) {
-        let offset = AppGroupStore(suiteName: AppConfig.appGroupID)?.twoWeekPageOffset ?? 0
-        var (start, end) = SyncCoordinator.canonicalRange(
-            coveringOffset: offset, weekCount: 2, calendar: calendar, now: now
-        )
-        if let existing = EventCache(appGroupIdentifier: AppConfig.appGroupID)?.read() {
-            start = min(start, existing.windowStart)
-            end = max(end, existing.windowEnd)
-        }
-        return (start, end)
-    }
 }

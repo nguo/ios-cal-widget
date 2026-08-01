@@ -169,6 +169,13 @@ lockstep against mismatched boundaries.
   whatever it added — so back-paging stays cached within a session but never permanently. Don't
   reintroduce a union-with-existing-window refresh; that was `refetchAll`, and it grew the
   refetched range without bound for anyone who refreshed from the widget instead of the app.
+  **This applies to the app's `AppSyncManager.syncNow` too**, which is where a second copy of
+  that union survived after `refetchAll` was deleted: it read the cache's own `windowStart` /
+  `windowEnd` and unioned against them, so each sync widened the window the *next* sync would
+  union against. `syncNow` keeps its own fetch (it needs the GoogleSignIn token and the
+  freshly-listed sources, which `refreshCanonical` can't supply on first run) but must take its
+  range from `canonicalRange(coveringOffset:)` unmodified. No sync's range may be a function of
+  what is currently cached — that is the whole property, and it is why nothing needs pruning.
 - **That one range must satisfy both widgets, which want different windows.** The grid is
   week-aligned (most-recent Sunday … +2wk); the agenda is today … +`agendaHorizonDays`.
   `canonicalRange(coveringOffset:)` spans the union — it starts at the *Sunday* (not today) and
