@@ -45,8 +45,15 @@ public struct EventCacheData: Codable, Equatable, Sendable {
     }
 
     /// PAGINATION path: widen the cache to include a freshly fetched range, merging in
-    /// its events/sources without discarding what's already cached. De-dupes by id
-    /// (incoming wins). Use when the user pages into a range not yet cached.
+    /// its events/sources without discarding what's already cached. De-dupes by
+    /// `CalendarEvent.cacheKey` (incoming wins). Use when the user pages into a range not yet
+    /// cached.
+    ///
+    /// The key is calendar + id, not id alone: the same meeting reachable through two calendars
+    /// returns once per calendar under the same id, and those are two rows the widget draws in
+    /// two colors. Keying on id merged them into one and handed the survivor whichever calendar
+    /// arrived last, so paging into an uncached window silently dropped a copy and could recolor
+    /// the other. The canonical path never had this — it replaces wholesale and de-dupes nothing.
     public func appending(
         events newEvents: [CalendarEvent],
         sources newSources: [CalendarSource],
@@ -54,21 +61,26 @@ public struct EventCacheData: Codable, Equatable, Sendable {
         rangeEnd: Date,
         generatedAt now: Date
     ) -> EventCacheData {
-        var eventsById: [String: CalendarEvent] = [:]
-        for e in events { eventsById[e.id] = e }
-        for e in newEvents { eventsById[e.id] = e } // incoming wins
+        var eventsByKey: [CalendarEvent.CacheKey: CalendarEvent] = [:]
+        for e in events { eventsByKey[e.cacheKey] = e }
+        for e in newEvents { eventsByKey[e.cacheKey] = e } // incoming wins
 
         var sourcesById: [String: CalendarSource] = [:]
         for s in sources { sourcesById[s.id] = s }
         for s in newSources { sourcesById[s.id] = s }
 
-        // Sorts are cosmetic — they keep output deterministic for tests.
+        // Sorts are cosmetic — they keep output deterministic for tests. Events tie-break on the
+        // cache key because start date alone isn't a total order: the duplicates this merge now
+        // preserves are the *same* meeting in two calendars, so they share a start exactly, and
+        // ordering them by dictionary iteration would vary run to run.
         return EventCacheData(
             generatedAt: now,
             windowStart: min(windowStart, rangeStart),
             windowEnd: max(windowEnd, rangeEnd),
             sources: sourcesById.values.sorted { $0.id < $1.id },
-            events: eventsById.values.sorted { $0.startDate < $1.startDate }
+            events: eventsByKey.values.sorted {
+                ($0.startDate, $0.calendarId, $0.id) < ($1.startDate, $1.calendarId, $1.id)
+            }
         )
     }
 }

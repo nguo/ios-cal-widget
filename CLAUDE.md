@@ -145,9 +145,14 @@ lockstep against mismatched boundaries.
 - **Read the cache once per timeline build and pass it down** (`AgendaEntryBuilder.live(cache:)`).
   The provider builds an entry per reload point; re-decoding the file for each is real memory
   and CPU inside a jetsam-limited extension.
-- **Never key a `ForEach` on `CalendarEvent.id`.** It's Google's event id and repeats across
-  calendars when you're invited on two connected accounts — duplicate SwiftUI ids render the
-  first row twice, showing the wrong calendar color. Key by position.
+- **`CalendarEvent.id` does not identify an event — `cacheKey` (calendar + id) does.** It's
+  Google's event id, unique only *within* a calendar, so the same meeting reachable through two
+  calendars comes back once per calendar under one id. Two consequences, same root cause:
+  never key a `ForEach` on it (duplicate SwiftUI ids render the first row twice in the wrong
+  calendar's color — key by position), and never key a de-dupe or lookup on it
+  (`EventCacheData.appending` did, which collapsed the copies and left the survivor wearing
+  whichever calendar arrived last). `EventCacheTests` pins both halves of the merge behaviour:
+  copies on different calendars survive, a refetch of one calendar still replaces its own.
 - **A widget tap can only open this app.** `Link` does *not* launch Google Calendar; iOS hands
   the URL to `CalWidgetApp.onOpenURL`, which forwards it. `OpenDeepLinkIntent` exists only
   because `systemSmall` ignores `Link` — it is not a way to skip the app hop. The 500ms
@@ -218,7 +223,9 @@ lockstep against mismatched boundaries.
   also matches `evilgoogle.com`. Both the `onOpenURL` router and the pending-link forwarder
   validate; the forwarder clears the stashed link *before* validating so a rejected one can't
   wedge the queue.
-- Cross-account duplicate events currently render twice by design; deduping was deferred.
+- Cross-account duplicate events currently render twice by design; deduping was deferred. The
+  cache preserves them deliberately (see `cacheKey`) — if they're ever collapsed, it has to
+  happen at render, where the widget can pick which calendar's color to show.
 - Sync is **full-refetch only**. `nextSyncToken` is surfaced by the API client but not yet
   stored, so every refresh refetches the whole window — a known, deliberate gap.
 

@@ -35,8 +35,9 @@ func d(_ y: Int, _ m: Int, _ day: Int, _ h: Int = 0, _ mi: Int = 0) -> Date {
     return cal.date(from: c)!
 }
 
-func ev(_ id: String, _ title: String, _ start: Date, _ end: Date, allDay: Bool = false) -> CalendarEvent {
-    CalendarEvent(id: id, calendarId: "c", title: title, startDate: start, endDate: end, isAllDay: allDay, colorHex: "#000")
+func ev(_ id: String, _ title: String, _ start: Date, _ end: Date, allDay: Bool = false,
+        calendarId: String = "c", color: String = "#000") -> CalendarEvent {
+    CalendarEvent(id: id, calendarId: calendarId, title: title, startDate: start, endDate: end, isAllDay: allDay, colorHex: color)
 }
 
 // MARK: DateWindow
@@ -175,6 +176,44 @@ do {
     eq(merged.windowEnd, newEnd, "append widened window forward")
     eq(Set(merged.events.map { $0.id }), Set(["1", "2"]), "merged event ids")
     eq(merged.events.first { $0.id == "1" }?.title, "Fresh", "incoming event won de-dupe")
+}
+
+// MARK: Merge de-dupes on calendar + id, not id alone
+do {
+    // The same meeting reachable through two calendars comes back once per calendar under one
+    // Google event id. Keying the merge on `id` collapsed them and recolored the survivor.
+    let s0 = d(2026, 3, 1, 0, 0)
+    let e0 = d(2026, 3, 15, 0, 0)
+    let start = d(2026, 3, 2, 9)
+    let end = d(2026, 3, 2, 10)
+
+    let onWork = ev("shared", "Standup", start, end, calendarId: "work", color: "#111")
+    let base = EventCacheData(generatedAt: s0, windowStart: s0, windowEnd: e0, sources: [], events: [onWork])
+
+    let onPersonal = ev("shared", "Standup", start, end, calendarId: "personal", color: "#222")
+    let merged = base.appending(events: [onPersonal], sources: [], rangeStart: s0, rangeEnd: e0, generatedAt: s0)
+    eq(merged.events.count, 2, "same id on two calendars survives as two events")
+    eq(merged.events.first { $0.calendarId == "work" }?.colorHex, "#111", "work copy keeps its color")
+    eq(merged.events.first { $0.calendarId == "personal" }?.colorHex, "#222", "personal copy keeps its color")
+
+    // …but a refetch of one calendar still replaces that calendar's own copy.
+    let renamed = ev("shared", "Standup (moved)", start, end, calendarId: "work")
+    let again = merged.appending(events: [renamed], sources: [], rangeStart: s0, rangeEnd: e0, generatedAt: s0)
+    eq(again.events.count, 2, "refetch replaces its own copy rather than adding one")
+    eq(again.events.first { $0.calendarId == "work" }?.title, "Standup (moved)", "own-calendar de-dupe still applies")
+
+    // Surviving duplicates share a start exactly, so the sort must break the tie itself.
+    let ids = ["work", "personal", "team", "family"]
+    let incoming = ids.map { ev("shared", "Standup", start, end, calendarId: $0) }
+    let empty = EventCacheData(generatedAt: s0, windowStart: s0, windowEnd: e0, sources: [], events: [])
+    let ordering = empty.appending(events: incoming, sources: [], rangeStart: s0, rangeEnd: e0, generatedAt: s0)
+        .events.map { $0.calendarId }
+    var stable = true
+    for _ in 0 ..< 20 {
+        let shuffled = empty.appending(events: incoming.shuffled(), sources: [], rangeStart: s0, rangeEnd: e0, generatedAt: s0)
+        if shuffled.events.map({ $0.calendarId }) != ordering { stable = false }
+    }
+    check(stable, "tied start dates order deterministically regardless of input order")
 }
 
 // MARK: SyncCoordinator canonical range (today .. +2 weeks)

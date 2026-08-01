@@ -69,6 +69,26 @@ public struct CalendarEvent: Codable, Identifiable, Hashable, Sendable {
         isDeclined = try c.decodeIfPresent(Bool.self, forKey: .isDeclined) ?? false
     }
 
+    /// Identity of an event *within the cache*. `id` alone is not it: Google's event id is unique
+    /// only within a calendar, and the same meeting reachable through two calendars comes back
+    /// once per calendar carrying the same `id`. Those are two rows the widget draws separately
+    /// (each in its own calendar's color), so anything that de-dupes or keys events must use this
+    /// pair — de-duping on `id` collapses them to one, and "incoming wins" then leaves the
+    /// survivor showing whichever calendar's color arrived last.
+    ///
+    /// Same root cause as the "never key a `ForEach` on `CalendarEvent.id`" rule.
+    public struct CacheKey: Hashable, Sendable {
+        public let calendarId: String
+        public let id: String
+
+        public init(calendarId: String, id: String) {
+            self.calendarId = calendarId
+            self.id = id
+        }
+    }
+
+    public var cacheKey: CacheKey { CacheKey(calendarId: calendarId, id: id) }
+
     /// The last calendar day this event covers, inclusive. For all-day events the
     /// stored `endDate` is exclusive (Google's convention), so this steps back one day.
     public func lastCoveredDay(in calendar: Calendar) -> Date {
