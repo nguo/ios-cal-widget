@@ -113,6 +113,16 @@ lockstep against mismatched boundaries.
   `Calendar.current` + `firstWeekday = 1` again; `DateWindow`'s week alignment depends on it, so
   a single site drifting is an off-by-one-day bug. (`DateWindow` normalizes its injected
   calendar internally — that one is deliberate.)
+- **A day is not 86,400 seconds. Step days with `calendar.date(byAdding: .day, …)`.** Not a
+  theoretical purity point: a grid window's last day is a Saturday, and several zones move the
+  clock at midnight *entering Sunday* (America/Santiago, America/Nuuk, Asia/Beirut, Asia/Gaza,
+  Pacific/Easter), so that Saturday is 23 or 25 hours. `DateWindow.endExclusive` added a flat day
+  and on the 25-hour one landed at 23:00 Saturday — an hour *inside* the window it bounds, which
+  shortened the fetch's `timeMax` so events in the window's last hour were never returned, and
+  left a gap between windows that should abut. It's stored now, computed in `init` where the
+  calendar is in scope; `DateWindowTests` pins it in Santiago. The one acceptable use is the
+  `?? now.addingTimeInterval(86_400)` fallbacks in the timeline providers, which are only
+  reached if calendar arithmetic fails outright and only pick a reload time.
 - **Filter cached events through `EventCacheData.visibleEvents(calendarIds:showDeclined:)`.**
   It is the single definition of "visible". The reload scheduler and the render path must agree,
   or the widget wakes for events it doesn't draw.

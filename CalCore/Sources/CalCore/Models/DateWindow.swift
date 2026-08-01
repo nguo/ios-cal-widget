@@ -18,7 +18,15 @@ public struct DateWindow: Equatable, Sendable {
 
     /// Exclusive end: start-of-day of the day *after* the last day in the window.
     /// Convenient for range checks (`startDate ..< endExclusive`).
-    public var endExclusive: Date { days.last.map { $0.addingTimeInterval(86_400) } ?? startDate }
+    ///
+    /// Stored, not computed, because getting it right needs the calendar — and this used to add a
+    /// flat 86,400 seconds instead. A window's last day is a Saturday, and several zones shift the
+    /// clock at midnight *entering Sunday* (America/Santiago, America/Nuuk, Asia/Beirut,
+    /// Asia/Gaza, Pacific/Easter), which makes that Saturday 23 or 25 hours long. On the 25-hour
+    /// one the flat day landed at 23:00 Saturday — an hour inside the window it was supposed to
+    /// bound — so the fetch's `timeMax` cut an hour early and events in the window's final hour
+    /// went missing, and consecutive windows no longer abutted.
+    public let endExclusive: Date
 
     /// Builds the window for the given reference date and offset.
     /// - Parameters:
@@ -47,6 +55,11 @@ public struct DateWindow: Equatable, Sendable {
         self.pageOffset = pageOffset
         self.startDate = cal.startOfDay(for: start)
         self.days = days
+        // Same day-stepping the `days` loop uses, so the end lands on a real midnight and the
+        // next window's first day is exactly this instant.
+        let lastDay = days.last ?? cal.startOfDay(for: start)
+        self.endExclusive = cal.date(byAdding: .day, value: 1, to: lastDay)
+            .map { cal.startOfDay(for: $0) } ?? lastDay
     }
 
     /// The Sunday (start-of-day) beginning the week that contains `date`.

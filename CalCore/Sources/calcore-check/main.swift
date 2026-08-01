@@ -55,6 +55,29 @@ do {
     eq(w.monthLabel(calendar: cal, locale: Locale(identifier: "en_US")), "MARCH", "month label")
 }
 
+// MARK: endExclusive across a DST shift on the window's last day
+do {
+    // A window's last day is a Saturday, and several zones move the clock at midnight entering
+    // Sunday, making that Saturday 23 or 25 hours. Santiago's April fall-back makes it 25, where
+    // a flat 86,400s end landed at 23:00 Saturday — inside the window it was meant to bound.
+    var santiago = Calendar(identifier: .gregorian)
+    santiago.timeZone = TimeZone(identifier: "America/Santiago")!
+    santiago.locale = Locale(identifier: "en_US_POSIX")
+    santiago.firstWeekday = 1
+    func sd(_ y: Int, _ m: Int, _ day: Int, _ h: Int = 0) -> Date {
+        var c = DateComponents(); c.year = y; c.month = m; c.day = day; c.hour = h
+        return santiago.date(from: c)!
+    }
+
+    // Sun 2026-03-22 … Sat 2026-04-04, the Saturday Santiago falls back.
+    let ref = sd(2026, 3, 25, 12)
+    let w = DateWindow(referenceDate: ref, pageOffset: 0, weekCount: 2, calendar: santiago)
+    eq(w.days.last!, sd(2026, 4, 4), "window ends on the transition Saturday")
+    eq(w.endExclusive, santiago.startOfDay(for: sd(2026, 4, 5, 12)), "end is the next real midnight")
+    let next = DateWindow(referenceDate: ref, pageOffset: 1, weekCount: 2, calendar: santiago)
+    eq(next.days.first!, w.endExclusive, "windows abut across the DST shift")
+}
+
 // MARK: EventTextFormatter
 do {
     eq(EventTextFormatter.timePrefix(for: d(2026, 3, 16, 16, 0), calendar: cal), "4p", "16:00 -> 4p")
